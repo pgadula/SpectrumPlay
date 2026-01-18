@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "raylib.h"
 #include <math.h>
-#define N 128
+#define N 64 
 #define M_2PI  M_PI*2
 
 const size_t sw = 1680;
@@ -9,16 +9,17 @@ const size_t sh = 1024;
 const size_t half_sh = sh/2;
 const size_t r = 5;
 
-float cw = sw/(N-1);
-
-void fft(float in[], float out [], size_t n){
-    return;
-}
-
 void print(float in[], size_t n){
     printf("\n");
     for(size_t i = 0; i < n; i++){
        printf("%f\n", in[i]);
+    }
+}
+
+void print_freq(float freq[], size_t n){
+    printf("\n");
+    for(size_t f = 0; f < n; f++){
+       printf("[%zu]\t %f\n", f, freq[f]);
     }
 }
 
@@ -63,7 +64,7 @@ void gen_points(float in[], Vector2 points[], size_t n, float max, float min){
     float max_abs = fmax(fabs(max), fabs(min));
     for(size_t i = 0; i < n; i++){
         float p = in[i] / max_abs;
-        points[i] = (Vector2){ .x = cw*i+r, .y = half_sh + (p*(half_sh-r))};
+        points[i] = (Vector2){ .x = sw*i+r, .y = half_sh + (p*(half_sh-r))};
     }
 }
 
@@ -92,6 +93,59 @@ void draw_signal_norm_area(const float in[], size_t n,
     }
 }
 
+void spectrum_abs_normalize(const float in[], float out[], size_t n)
+{
+    float maxAbs = 0.0f;
+
+    for (size_t i = 0; i < n; i++) {
+        float a = fabsf(in[i]);
+        if (a > maxAbs) maxAbs = a;
+    }
+
+    if (maxAbs <= 0.0f) {
+        for (size_t i = 0; i < n; i++) out[i] = 0.0f;
+        return;
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        out[i] = fabsf(in[i]) / maxAbs;
+    }
+}
+
+void draw_spectrum_rects(const float values[], size_t n,
+        float x0, float y0, float w, float h,
+        Color fill, Color outline)
+{
+    if (n == 0) return;
+
+    float barWf = w / (float)n;
+    if (barWf < 1.0f) barWf = 1.0f;
+
+    DrawLine((int)x0, (int)(y0 + h), (int)(x0 + w), (int)(y0 + h), WHITE);
+
+    for (size_t i = 0; i < n; i++) {
+        float a = values[i];
+        if (a < 0.0f) a = 0.0f;
+        if (a > 1.0f) a = 1.0f;
+
+        float barH = a * h;
+
+        float x = x0 + (float)i * barWf;
+        float y = (y0 + h) - barH;
+
+        int xi = (int)x;
+        int yi = (int)y;
+        int wi = (int)(barWf - 1.0f);
+        if (wi < 1) wi = 1;
+        int hi = (int)barH;
+
+        DrawRectangle(xi, yi, wi, hi, fill);
+        DrawRectangleLines(xi, yi, wi, hi, outline);
+    }
+}
+
+
+
 void signal_add(float s1[], float s2[], float output[],  int n){
     for(size_t i = 0; i < n; i++)
         output[i] += s1[i]+s2[i];
@@ -102,11 +156,22 @@ void signal_zero(float x[], size_t n) {
 }
 
 void signal_copy(const float in[], float out[], size_t n) {
+    //TODO should I change this to memycopy?
     for (size_t i = 0; i < n; i++) out[i] = in[i];
 }
 
 void signal_scale(float x[], size_t n, float a) {
     for (size_t i = 0; i < n; i++) x[i] *= a;
+}
+
+float signal_sum(float x[], int n) {
+    float sum = 0;
+    for (size_t i = 0; i < n; i++) sum+= x[i];
+    return sum;
+}
+
+void signal_mult(float x[], float y[], float output[], int n) {
+    for (size_t i = 0; i < n; i++) output[i] = x[i] *  y[i];
 }
 
 void signal_accum(float out[], const float in[], size_t n, float w)
@@ -149,19 +214,61 @@ void draw_singal(float signal[], int n){
     }
 }
 
-int main(){
-    float max, min;
-    float s1[N];
-    float s2[N];
-    float s3[N];
 
-    gen_signal(s1, sin, 2, 0, N);
-    gen_signal(s2, cos, 9, 0, N);
-    gen_signal(s3, sin, 9, 0, N);
-    signal_accum(s3, s1, N, 1);
-    signal_accum(s3, s2, N, 1);
-     
+void fft(float in[], float freq[], size_t n){
+    float r[n];
+    signal_copy(in, r, n);
+    for(size_t f = 0; f < n; f++){
+
+        float freq_signal[n];
+        gen_signal(freq_signal, sin, f, 0, N);
+
+        float o[n];
+        signal_mult(r, freq_signal, o, n);
+
+        freq[f] = signal_sum(o, n);
+    }
+    print(freq, n);
+}
+
+void draw_spectrum_labels(
+        float fs,
+        size_t n,
+        float x0, float y0, float w, float h,
+        size_t every,
+        Color col)
+{
+    if (n == 0 || every <= 0) return;
+
+    float barW = w / (float)n;
+    int fontSize = 12;
+
+    for (size_t k = 0; k < n; k += every) {
+        float x = x0 + k * barW;
+
+        float freq = (fs * (float)k) / (float)n;
+
+        DrawText(
+                TextFormat("%.1f", freq),
+                (int)(x + 2),
+                (int)(y0 + h + 4),
+                fontSize,
+                col
+                );
+    }
+}
+
+int main(){
+    float s1[N];
+
+    float freq[N];
+
+    gen_signal(s1, sin, 8, 0, N);
+
+    fft(s1, freq, N);
+    spectrum_abs_normalize(freq, freq, N);
     
+    signal_normalize(s1, N);
     InitWindow(sw, sh, "FFT");
     SetTargetFPS(60);
 
@@ -170,11 +277,10 @@ int main(){
         BeginDrawing();
         ClearBackground(BLACK);
 
-        signal_normalize(s2, N);
-        draw_signal_norm_area(s2, N, sw/2, sh/2, sw/2, sh/5, RED);
+        draw_signal_norm_area(s1, N, sw/2, sh/2, sw/2, sh/5, RED);
 
-        signal_normalize(s3, N);
-        draw_signal_norm_area(s3, N, 0, 200, sw/2, sh/2, GREEN);
+        draw_spectrum_rects(freq, N, 0, 200, sw, 400, RED, GREEN);
+        draw_spectrum_labels(N, N/2,   0, 200, sw, 400, 1, PURPLE);
 
         DrawLine(0, half_sh, sw, half_sh, WHITE);
 
@@ -182,6 +288,7 @@ int main(){
     }
 
     CloseWindow();
+    print_freq(freq, N);
 
     return 0;
 }
