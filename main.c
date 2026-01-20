@@ -10,6 +10,25 @@ const size_t sh = 1024;
 const size_t half_sh = sh/2;
 const size_t r = 5;
 
+void abs_spectrum(const float complex spec[],
+        float out[],
+        int n)
+{
+    float max = 0.0f;
+
+    for (int i = 0; i < n; i++) {
+        out[i] = cabsf(spec[i]);
+        if (out[i] > max)
+            max = out[i];
+    }
+
+    if (max > 0.0f) {
+        for (int i = 0; i < n; i++) {
+            out[i] /= max;
+        }
+    }
+}
+
 void print(float in[], size_t n){
     printf("\n");
     for(size_t i = 0; i < n; i++){
@@ -103,7 +122,8 @@ void draw_signal_norm_area(const float in[], size_t n,
     }
 }
 
-void spectrum_abs_normalize(const float in[], float out[], size_t n)
+
+void spectrum_abs_normalize(const complex float in[], float out[], size_t n)
 {
     float maxAbs = 0.0f;
 
@@ -233,7 +253,7 @@ void dft(float in[], float complex output[], size_t n){
         for(size_t i = 0; i < n; i++){
            
             float t = (float)i/(float)(n-1);
-            freq_signal[i] = cexpf(t * ff * I);
+            freq_signal[i] = cexpf(-I * t * ff);
             output[f] += freq_signal[i] * in[i];
         }
     }
@@ -287,35 +307,38 @@ int main(){
     float s2[N];
     float s3[N];
 
-    float complex freq[N];
+    float complex freq_complex[N];
+    float freq[N];
 
     gen_signal(s1, sin, 3, 0, N);
     gen_signal(s2, cos, 9, 0, N);
+
     signal_add(s1, s2, s3,  N);
-    dft(s3, freq, N);
-  //  spectrum_abs_normalize(freq, freq, N);
-  //  
-  //  signal_normalize(s1, N);
-  //  InitWindow(sw, sh, "dft_slow");
-  //  SetTargetFPS(60);
+    dft(s3, freq_complex, N);
 
-  //  while (!WindowShouldClose())
-  //  {
-  //      BeginDrawing();
-  //      ClearBackground(BLACK);
+    abs_spectrum(freq_complex, freq, N);
+    
+    signal_normalize(s3, N);
 
-  //      draw_signal_norm_area(s3, N, sw/2+10, 120, sw/2-10, sh/5, RED);
+    InitWindow(sw, sh, "dft_slow");
+    SetTargetFPS(60);
 
-  //      draw_spectrum_rects(freq, N,   10, 150, sw/2-10, sh/3, RED, GREEN);
-  //      draw_spectrum_labels(N, N,   10, 150, sw/2-10, sh/3, 1, LIGHTGRAY);
+    while (!WindowShouldClose())
+    {
+        BeginDrawing();
+        ClearBackground(BLACK);
 
-  //      DrawLine(0, half_sh, sw, half_sh, WHITE);
+        draw_signal_norm_area(s3, N, sw/2+10, 120, sw/2-10, sh/5, RED);
 
-  //      EndDrawing();
-  //  }
+        draw_spectrum_rects(freq, N,   10, 150, sw/2-10, sh/3, RED, GREEN);
+        draw_spectrum_labels(N, N,   10, 150, sw/2-10, sh/3, 1, LIGHTGRAY);
 
-  //  CloseWindow();
-    print_freq(freq, N);
+        DrawLine(0, half_sh, sw, half_sh, WHITE);
+
+        EndDrawing();
+    }
+
+    CloseWindow();
 
     return 0;
 }
