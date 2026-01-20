@@ -1,7 +1,8 @@
+#include <complex.h>
 #include <stdio.h>
 #include "raylib.h"
 #include <math.h>
-#define N 64 
+#define N 32 
 #define M_2PI  M_PI*2
 
 const size_t sw = 1680;
@@ -16,10 +17,10 @@ void print(float in[], size_t n){
     }
 }
 
-void print_freq(float freq[], size_t n){
+void print_freq(float complex freq[], size_t n){
     printf("\n");
     for(size_t f = 0; f < n; f++){
-       printf("[%zu]\t %f\n", f, freq[f]);
+       printf("[%zu]\t r:%f i:%f\n", f, crealf(freq[f]), cimagf(freq[f]));
     }
 }
 
@@ -36,6 +37,15 @@ void example(float in[], size_t n){
 }
 
 void gen_signal(float output[], double (*func)(double t), int f, float p, size_t n){
+    float ff = M_2PI * f;
+    for(size_t i = 0; i < n; i++){
+        float t = (float)i/(float)(n-1);
+        float v = (*func)(t * ff + p);
+        output[i] = v;
+    }
+}
+
+void gen_signalI(float complex output[], float complex (*func)(float complex t), int f, float p, size_t n){
     float ff = M_2PI * f;
     for(size_t i = 0; i < n; i++){
         float t = (float)i/(float)(n-1);
@@ -148,7 +158,7 @@ void draw_spectrum_rects(const float values[], size_t n,
 
 void signal_add(float s1[], float s2[], float output[],  int n){
     for(size_t i = 0; i < n; i++)
-        output[i] += s1[i]+s2[i];
+        output[i] = s1[i]+s2[i];
 }
 
 void signal_zero(float x[], size_t n) {
@@ -215,7 +225,21 @@ void draw_singal(float signal[], int n){
 }
 
 
-void fft(float in[], float freq[], size_t n){
+void dft(float in[], float complex output[], size_t n){
+    for(size_t f = 0; f < n; f++){
+        float complex freq_signal[n];
+        float ff = M_2PI * f;
+        output[f] = 0;
+        for(size_t i = 0; i < n; i++){
+           
+            float t = (float)i/(float)(n-1);
+            freq_signal[i] = cexpf(t * ff * I);
+            output[f] += freq_signal[i] * in[i];
+        }
+    }
+}
+
+void dft_slow(float in[], float freq[], size_t n){
     float r[n];
     signal_copy(in, r, n);
     for(size_t f = 0; f < n; f++){
@@ -249,7 +273,7 @@ void draw_spectrum_labels(
         float freq = (fs * (float)k) / (float)n;
 
         DrawText(
-                TextFormat("%.1f", freq),
+                TextFormat("%i",(int)freq),
                 (int)(x + 2),
                 (int)(y0 + h + 4),
                 fontSize,
@@ -260,34 +284,37 @@ void draw_spectrum_labels(
 
 int main(){
     float s1[N];
+    float s2[N];
+    float s3[N];
 
-    float freq[N];
+    float complex freq[N];
 
-    gen_signal(s1, sin, 8, 0, N);
+    gen_signal(s1, sin, 3, 0, N);
+    gen_signal(s2, cos, 9, 0, N);
+    signal_add(s1, s2, s3,  N);
+    dft(s3, freq, N);
+  //  spectrum_abs_normalize(freq, freq, N);
+  //  
+  //  signal_normalize(s1, N);
+  //  InitWindow(sw, sh, "dft_slow");
+  //  SetTargetFPS(60);
 
-    fft(s1, freq, N);
-    spectrum_abs_normalize(freq, freq, N);
-    
-    signal_normalize(s1, N);
-    InitWindow(sw, sh, "FFT");
-    SetTargetFPS(60);
+  //  while (!WindowShouldClose())
+  //  {
+  //      BeginDrawing();
+  //      ClearBackground(BLACK);
 
-    while (!WindowShouldClose())
-    {
-        BeginDrawing();
-        ClearBackground(BLACK);
+  //      draw_signal_norm_area(s3, N, sw/2+10, 120, sw/2-10, sh/5, RED);
 
-        draw_signal_norm_area(s1, N, sw/2, sh/2, sw/2, sh/5, RED);
+  //      draw_spectrum_rects(freq, N,   10, 150, sw/2-10, sh/3, RED, GREEN);
+  //      draw_spectrum_labels(N, N,   10, 150, sw/2-10, sh/3, 1, LIGHTGRAY);
 
-        draw_spectrum_rects(freq, N, 0, 200, sw, 400, RED, GREEN);
-        draw_spectrum_labels(N, N/2,   0, 200, sw, 400, 1, PURPLE);
+  //      DrawLine(0, half_sh, sw, half_sh, WHITE);
 
-        DrawLine(0, half_sh, sw, half_sh, WHITE);
+  //      EndDrawing();
+  //  }
 
-        EndDrawing();
-    }
-
-    CloseWindow();
+  //  CloseWindow();
     print_freq(freq, N);
 
     return 0;
