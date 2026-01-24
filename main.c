@@ -1,14 +1,18 @@
+#include <assert.h>
 #include <complex.h>
 #include <stdio.h>
 #include "raylib.h"
 #include <math.h>
-#define N 64 
+#define FFT_IMPLEMENTATION
+#include "fft.h"
+#define N 32 
 #define M_2PI  M_PI*2
 
 const size_t sw = 1680;
 const size_t sh = 1024;
 const size_t half_sh = sh/2;
 const size_t r = 5;
+
 
 void abs_spectrum(const float complex spec[],
         float out[],
@@ -30,10 +34,10 @@ void abs_spectrum(const float complex spec[],
 }
 
 void print(float in[], size_t n){
-    printf("\n");
     for(size_t i = 0; i < n; i++){
-       printf("%f\n", in[i]);
+       printf("%f, ", in[i]);
     }
+    printf("\n");
 }
 
 void print_freq(float complex freq[], size_t n){
@@ -55,21 +59,21 @@ void example(float in[], size_t n){
     }
 }
 
-void gen_signal(float output[], double (*func)(double t), int f, float p, size_t n){
+void gen_signal(float out[], double (*func)(double t), int f, float p, size_t n){
     float ff = M_2PI * f;
     for(size_t i = 0; i < n; i++){
-        float t = (float)i/(float)(n-1);
+        float t = (float)i/(float)(n);
         float v = (*func)(t * ff + p);
-        output[i] = v;
+        out[i] = v;
     }
 }
 
-void gen_signalI(float complex output[], float complex (*func)(float complex t), int f, float p, size_t n){
+void gen_signalI(float complex out[], float complex (*func)(float complex t), int f, float p, size_t n){
     float ff = M_2PI * f;
     for(size_t i = 0; i < n; i++){
         float t = (float)i/(float)(n-1);
         float v = (*func)(t * ff + p);
-        output[i] = v;
+        out[i] = v;
     }
 }
 
@@ -174,11 +178,9 @@ void draw_spectrum_rects(const float values[], size_t n,
     }
 }
 
-
-
-void signal_add(float s1[], float s2[], float output[],  int n){
+void signal_add(float s1[], float s2[], float out[],  int n){
     for(size_t i = 0; i < n; i++)
-        output[i] = s1[i]+s2[i];
+        out[i] = s1[i]+s2[i];
 }
 
 void signal_zero(float x[], size_t n) {
@@ -200,8 +202,8 @@ float signal_sum(float x[], int n) {
     return sum;
 }
 
-void signal_mult(float x[], float y[], float output[], int n) {
-    for (size_t i = 0; i < n; i++) output[i] = x[i] *  y[i];
+void signal_mult(float x[], float y[], float out[], int n) {
+    for (size_t i = 0; i < n; i++) out[i] = x[i] *  y[i];
 }
 
 void signal_accum(float out[], const float in[], size_t n, float w)
@@ -245,47 +247,17 @@ void draw_singal(float signal[], int n){
 }
 
 
-void fft(float in[], float complex output[], size_t n){
+void dft(float in[], float complex out[], size_t n){
     for(size_t f = 0; f < n; f++){
         float complex freq_signal[n];
         float ff = M_2PI * f;
-        output[f] = 0;
-        for(size_t i = 0; i < n; i++){
-           
-            float t = (float)i/(float)(n-1);
-            freq_signal[i] = cexpf(-I * t * ff);
-            output[f] += freq_signal[i] * in[i];
-        }
-    }
-}
-
-void dft(float in[], float complex output[], size_t n){
-    for(size_t f = 0; f < n; f++){
-        float complex freq_signal[n];
-        float ff = M_2PI * f;
-        output[f] = 0;
+        out[f] = 0;
         for(size_t i = 0; i < n; i++){
             float t = (float)i/(float)(n-1);
             freq_signal[i] = cexpf(-I * t * ff);
-            output[f] += freq_signal[i] * in[i];
+            out[f] += freq_signal[i] * in[i];
         }
     }
-}
-
-void dft_slow(float in[], float freq[], size_t n){
-    float r[n];
-    signal_copy(in, r, n);
-    for(size_t f = 0; f < n; f++){
-
-        float freq_signal[n];
-        gen_signal(freq_signal, sin, f, 0, N);
-
-        float o[n];
-        signal_mult(r, freq_signal, o, n);
-
-        freq[f] = signal_sum(o, n);
-    }
-    print(freq, n);
 }
 
 void draw_spectrum_labels(
@@ -318,27 +290,23 @@ void draw_spectrum_labels(
 int main(){
     float s1[N];
     float s2[N];
-    float s3[N];
-    float s4[N];
 
     float complex freq_complex[N];
     float freq[N];
 
-    gen_signal(s1, cos, 3, 0, N);
-    gen_signal(s2, cos, 9, 0, N);
-    gen_signal(s3, sin, 1, 0, N);
-    gen_signal(s4, cos, 5, 0, N);
+    gen_signal(s1, cos, 2, 0, N);
+    gen_signal(s2, sin, 12, 0, N);
+    signal_add(s1, s2, s1, N);
 
-    signal_add(s1, s2, s1,  N);
-    signal_add(s1, s3, s1,  N);
-    signal_add(s1, s4, s1,  N);
-    dft(s1, freq_complex, N);
+    fft(s1, freq_complex, 1, N);
+
+    print_freq(freq_complex, N);
 
     abs_spectrum(freq_complex, freq, N);
     
     signal_normalize(s1, N);
 
-    InitWindow(sw, sh, "dft_slow");
+    InitWindow(sw, sh, "Fourier Transform");
     SetTargetFPS(60);
 
     while (!WindowShouldClose())
