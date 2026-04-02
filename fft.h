@@ -3,6 +3,7 @@
 
 #include <complex.h>
 #include <math.h>
+#define M_2PI  M_PI*2
 
 void fft(const float in[], float complex out[], size_t stride,  size_t n){
     if(n == 1){

@@ -5,7 +5,8 @@
 #include <math.h>
 #define FFT_IMPLEMENTATION
 #include "fft.h"
-#define N 32 
+#define N 512 
+#define LOG_N 32 
 #define M_2PI  M_PI*2
 
 const size_t sw = 1680;
@@ -13,6 +14,18 @@ const size_t sh = 1024;
 const size_t half_sh = sh/2;
 const size_t r = 5;
 
+void log_spectrum(const float in[], float out[], int n, int out_n)
+{
+    for (int i = 0; i < out_n; i++) out[i] = 0.0f;
+
+    for (int i = 0; i < n; i++) {
+        int bin = (int)(log2f(i + 1));
+        if (bin >= out_n) bin = out_n - 1;
+
+        if (in[i] > out[bin])
+            out[bin] = in[i];
+    }
+}
 
 void abs_spectrum(const float complex spec[],
         float out[],
@@ -21,15 +34,15 @@ void abs_spectrum(const float complex spec[],
     float max = 0.0f;
 
     for (int i = 0; i < n; i++) {
-        out[i] = cabsf(spec[i]);
+        float v = 20.0f * log10f(cabsf(spec[i]) + 1e-6f);
+        out[i] = v; 
         if (out[i] > max)
             max = out[i];
     }
 
     if (max > 0.0f) {
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < n; i++) 
             out[i] /= max;
-        }
     }
 }
 
@@ -122,7 +135,7 @@ void draw_signal_norm_area(const float in[], size_t n,
         float y1 = cy - p1 * ay;
         float y2 = cy - p2 * ay;
 
-        DrawLine((int)x1, (int)y1, (int)x2, (int)y2, col);
+        DrawLineEx((Vector2){(int)x1, (int)y1}, (Vector2){(int)x2, (int)y2}, 3, col);
     }
 }
 
@@ -155,7 +168,7 @@ void draw_spectrum_rects(const float values[], size_t n,
     float barWf = w / (float)n;
     if (barWf < 1.0f) barWf = 1.0f;
 
-    DrawLine((int)x0, (int)(y0 + h), (int)(x0 + w), (int)(y0 + h), WHITE);
+   // DrawLine((int)x0, (int)(y0 + h), (int)(x0 + w), (int)(y0 + h), WHITE);
 
     for (size_t i = 0; i < n; i++) {
         float a = values[i];
@@ -247,19 +260,6 @@ void draw_singal(float signal[], int n){
 }
 
 
-void dft(float in[], float complex out[], size_t n){
-    for(size_t f = 0; f < n; f++){
-        float complex freq_signal[n];
-        float ff = M_2PI * f;
-        out[f] = 0;
-        for(size_t i = 0; i < n; i++){
-            float t = (float)i/(float)(n-1);
-            freq_signal[i] = cexpf(-I * t * ff);
-            out[f] += freq_signal[i] * in[i];
-        }
-    }
-}
-
 void draw_spectrum_labels(
         float fs,
         size_t n,
@@ -287,43 +287,53 @@ void draw_spectrum_labels(
     }
 }
 
-int main(){
-    float s1[N];
-    float s2[N];
 
+float current_frame[N];
+int current_size;
+
+void a_callback(void *bufferData, unsigned int frames){
+    current_size = frames;
+    for(int frame = 0; frame < N; frame++) current_frame[frame] = 0;
+
+    float *buffer = (float *)bufferData;
+
+    for(int frame = 0; frame < frames; frame++){
+        float multi = 0.5 * ( 1 - cos( (2 * PI * frame) / frames));
+        current_frame[frame] = buffer[frame * 2 + 0] * multi; //take only left channel
+    }
+}
+
+int main(){
     float complex freq_complex[N];
     float freq[N];
-
-    gen_signal(s1, cos, 2, 0, N);
-    gen_signal(s2, sin, 12, 0, N);
-    signal_add(s1, s2, s1, N);
-
-    fft(s1, freq_complex, 1, N);
-
-    print_freq(freq_complex, N);
-
-    abs_spectrum(freq_complex, freq, N);
-    
-    signal_normalize(s1, N);
-
     InitWindow(sw, sh, "Fourier Transform");
+    InitAudioDevice();
+    const char* audio_path = "./audio/arctic.mp3";
+   // const char* audio_path = "./audio/bass.wav";
+    Music m = LoadMusicStream(audio_path);
+    printf("Base audio info\n-sample rate: %d,\n-sample size: %d\n", m.stream.sampleRate, m.stream.sampleSize);
     SetTargetFPS(60);
+    PlayMusicStream(m);
+
+   AttachAudioStreamProcessor(m.stream, a_callback);
 
     while (!WindowShouldClose())
     {
+        UpdateMusicStream(m);
         BeginDrawing();
         ClearBackground(BLACK);
 
-        draw_signal_norm_area(s1, N, sw/2+10, 120, sw/2-10, sh/5, RED);
+        fft(current_frame, freq_complex, 1, N);
+        abs_spectrum(freq_complex, freq, N);
 
-        draw_spectrum_rects(freq, N/2,   10, 150, sw/2-10, sh/3, RED, BLUE);
-        draw_spectrum_labels(N/2, N/2,   10, 150, sw/2-10, sh/3, 1, LIGHTGRAY);
-
-        DrawLine(0, half_sh, sw, half_sh, WHITE);
+        draw_signal_norm_area(current_frame, current_size, 0, sh/2, sw/2, sh/2, RED);
+        draw_spectrum_rects(freq, current_size/2, 5, 160, sw, sh/3, BLUE, BLUE);
+        //DrawLine(0, half_sh, sw, half_sh, WHITE);
 
         EndDrawing();
     }
 
+    CloseAudioDevice();
     CloseWindow();
 
     return 0;
