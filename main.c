@@ -1,11 +1,12 @@
 #include <assert.h>
+#include <stdlib.h>
 #include <complex.h>
 #include <stdio.h>
 #include "raylib.h"
 #include <math.h>
 #define FFT_IMPLEMENTATION
 #include "fft.h"
-#define N 512 
+#define N 1024 
 #define LOG_N 32 
 #define M_2PI  M_PI*2
 
@@ -288,30 +289,69 @@ void draw_spectrum_labels(
 }
 
 
-float current_frame[N];
-int current_size;
+typedef struct{
+    float *data;
+    int size;
+    int write_index;
+} RingBuffer;
 
+
+RingBuffer rb_init(int size){
+    float *data = malloc(sizeof(float) * size);
+    RingBuffer rg = {
+        .data = data,
+        .size = size,
+        .write_index = 0
+    }; 
+
+    return rg;
+}
+void rb_write(RingBuffer* rg, float data){
+    rg->data[rg->write_index % rg->size] = data;
+    rg->write_index+=1;
+}
+
+float rb_read(const RingBuffer* rg, int index){
+    if(rg->write_index < rg->size) return 0.0;
+    int idx = (rg->write_index - rg->size + index) % rg->size;
+    if (idx < 0) idx += rg->size;
+    return rg->data[idx];
+}
+
+
+RingBuffer samples;
+float complex *freq_complex;
+int current_size;
+int total_samples;
+int current_index = 0;
 void a_callback(void *bufferData, unsigned int frames){
     current_size = frames;
-    for(int frame = 0; frame < N; frame++) current_frame[frame] = 0;
-
     float *buffer = (float *)bufferData;
 
     for(int frame = 0; frame < frames; frame++){
-        float multi = 0.5 * ( 1 - cos( (2 * PI * frame) / frames));
-        current_frame[frame] = buffer[frame * 2 + 0] * multi; //take only left channel
+        int idx = (current_index + frame) % total_samples;
+        rb_write(&samples,  buffer[frame * 2 + 0]); //take only left channel
     }
+
+    current_index += frames;
 }
 
-int main(){
-    float complex freq_complex[N];
+int main(){ 
+    float windows[N];
     float freq[N];
     InitWindow(sw, sh, "Fourier Transform");
     InitAudioDevice();
     const char* audio_path = "./audio/arctic.mp3";
-   // const char* audio_path = "./audio/bass.wav";
+    //const char* audio_path = "./audio/bass.wav";
     Music m = LoadMusicStream(audio_path);
+    m.looping = false;
     printf("Base audio info\n-sample rate: %d,\n-sample size: %d\n", m.stream.sampleRate, m.stream.sampleSize);
+
+    total_samples = m.frameCount;
+    samples = rb_init(N);
+    printf("total samples%d\n", total_samples);
+    freq_complex = malloc(sizeof(float complex) * N);
+
     SetTargetFPS(60);
     PlayMusicStream(m);
 
@@ -323,11 +363,18 @@ int main(){
         BeginDrawing();
         ClearBackground(BLACK);
 
-        fft(current_frame, freq_complex, 1, N);
+        for (int i = 0; i < N; i++) {
+            float data = rb_read(&samples, i);
+            float w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
+
+            windows[i] = data * w;
+        }
+
+        fft(windows, freq_complex, 1, N);
         abs_spectrum(freq_complex, freq, N);
 
-        draw_signal_norm_area(current_frame, current_size, 0, sh/2, sw/2, sh/2, RED);
-        draw_spectrum_rects(freq, current_size/2, 5, 160, sw, sh/3, BLUE, BLUE);
+        draw_signal_norm_area(windows, N, 0, sh/2, sw/2, sh/2, WHITE);
+        draw_spectrum_rects(freq, N/2, 5, 160, sw, sh/3, BLUE, BLUE);
         //DrawLine(0, half_sh, sw, half_sh, WHITE);
 
         EndDrawing();
