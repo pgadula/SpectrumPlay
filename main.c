@@ -4,6 +4,7 @@
 #define M_2PI  M_PI*2
 #define SPEC_W 800
 
+#include <string.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <complex.h>
@@ -387,19 +388,34 @@ long int find_size(const FILE *fp)
     return res;
 }
 
-int main(){ 
-    //const char* audio_path = "./audio/arctic.mp3";
-    FILE *fptr;
-    const char* audio_path = "./audio/bass.wav";
+const char* get_extension(const char *path) {
+    const char *dot = strrchr(path, '.');
 
+    if (!dot || dot == path) {
+        return NULL;
+    }
+
+    return dot; 
+}
+
+int main(){ 
+    const char* audio_path = "./audio/arctic.mp3";
+    FILE *fptr;
+    //const char* audio_path = "./audio/bass.wav";
+    const char *ext = get_extension(audio_path);
     fptr = fopen(audio_path, "rb");
+
+    if(fptr == NULL){
+        printf("Cannot open the file: %s", audio_path);
+        return 0;
+    }
 
     long int f_size = find_size(fptr); 
     if (f_size < 0){
+        printf("Invalid file");
         return 0;
     }
     char *buffer = malloc(sizeof(char) * f_size);
-    printf("SIZE of file %ld", f_size);
     fread(buffer, f_size, 1, fptr);
 
     fclose(fptr);
@@ -407,7 +423,7 @@ int main(){
     FileMusic fm = (FileMusic){
         .data = buffer,
         .byte_size = f_size,
-        .format = ".mp3"
+        .format = ext 
     };
     
     draw_scene(&fm);
