@@ -1,8 +1,15 @@
-#ifdef FFT_IMPLEMENTATION
-#define FFT_IMPLEMENTATION
+#ifndef FFT_H
+#define FFT_H
 
 #include <complex.h>
 #include <math.h>
+
+void fft(const float in[], float complex out[], size_t stride,  size_t n);
+void dft(float in[], float complex out[], size_t n);
+
+#endif
+
+#ifdef FFT_IMPLEMENTATION
 #define M_2PI  M_PI*2
 
 void fft(const float in[], float complex out[], size_t stride,  size_t n){
@@ -55,4 +62,4 @@ void dft(float in[], float complex out[], size_t n){
     }
 }
 
-#endif FFT_IMPLEMENTATION
+#endif

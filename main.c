@@ -1,65 +1,28 @@
+
+#define N 1024 
+#define LOG_N 32 
+#define M_2PI  M_PI*2
+#define SPEC_W 800
+
 #include <assert.h>
 #include <stdlib.h>
 #include <complex.h>
 #include <stdio.h>
 #include "raylib.h"
 #include <math.h>
+
+#define SIGNAL_IMPLEMENTATION 
+#include "signal_utils.h"
+
 #define FFT_IMPLEMENTATION
 #include "fft.h"
-#define N 1024 
-#define LOG_N 32 
-#define M_2PI  M_PI*2
-#define SPEC_W 800
+
 
 const size_t sw = 1680;
 const size_t sh = 1024;
 const size_t half_sh = sh/2;
 const size_t r = 5;
 float zoom = 2;
-
-
-void log_spectrum(const float in[], float out[], int n, int out_n)
-{
-    for (int i = 0; i < out_n; i++) out[i] = 0.0f;
-
-    for (int i = 0; i < n; i++) {
-        int bin = (int)(log2f(i + 1));
-        if (bin >= out_n) bin = out_n - 1;
-
-        if (in[i] > out[bin])
-            out[bin] = in[i];
-    }
-}
-
-void abs_spectrum(const float complex spec[],
-                  float out[],
-                  int n)
-{
-    for (int i = 0; i < n; i++) {
-        float v = 20.0f * log10f(cabsf(spec[i]) + 1e-6f);
-
-        v = (v + 80.0f) / 80.0f;
-
-        if (v < 0.0f) v = 0.0f;
-        if (v > 1.0f) v = 1.0f;
-
-        out[i] = v;
-    }
-}
-
-void print(float in[], size_t n){
-    for(size_t i = 0; i < n; i++){
-       printf("%f, ", in[i]);
-    }
-    printf("\n");
-}
-
-void print_freq(float complex freq[], size_t n){
-    printf("\n");
-    for(size_t f = 0; f < n; f++){
-       printf("[%zu]\t r:%f i:%f\n", f, crealf(freq[f]), cimagf(freq[f]));
-    }
-}
 
 void example(float in[], size_t n){
     int F = 1;
@@ -73,39 +36,6 @@ void example(float in[], size_t n){
     }
 }
 
-void gen_signal(float out[], double (*func)(double t), int f, float p, size_t n){
-    float ff = M_2PI * f;
-    for(size_t i = 0; i < n; i++){
-        float t = (float)i/(float)(n);
-        float v = (*func)(t * ff + p);
-        out[i] = v;
-    }
-}
-
-void gen_signalI(float complex out[], float complex (*func)(float complex t), int f, float p, size_t n){
-    float ff = M_2PI * f;
-    for(size_t i = 0; i < n; i++){
-        float t = (float)i/(float)(n-1);
-        float v = (*func)(t * ff + p);
-        out[i] = v;
-    }
-}
-
-void get_min_max(float in[], size_t n, float *min, float *max){
-    float c_min = in[0];
-    float c_max = in[0];
-    for(size_t i = 0; i < n; i++){
-        float v = in[i];
-        if(c_min > v){
-            c_min = v;
-        }
-        if(c_max < v){
-            c_max = v;
-        }
-    }
-    (*min) = c_min;
-    (*max) = c_max;
-}
 
 void gen_points(float in[], Vector2 points[], size_t n, float max, float min){
     float max_abs = fmax(fabs(max), fabs(min));
@@ -141,25 +71,6 @@ void draw_signal_norm_area(const float in[], size_t n,
 }
 
 
-void spectrum_abs_normalize(const complex float in[], float out[], size_t n)
-{
-    float maxAbs = 0.0f;
-
-    for (size_t i = 0; i < n; i++) {
-        float a = fabsf(in[i]);
-        if (a > maxAbs) maxAbs = a;
-    }
-
-    if (maxAbs <= 0.0f) {
-        for (size_t i = 0; i < n; i++) out[i] = 0.0f;
-        return;
-    }
-
-    for (size_t i = 0; i < n; i++) {
-        out[i] = fabsf(in[i]) / maxAbs;
-    }
-}
-
 void draw_spectrum_rects(const float values[], size_t n,
         float x0, float y0, float w, float h,
         Color fill, Color outline)
@@ -192,55 +103,6 @@ void draw_spectrum_rects(const float values[], size_t n,
     }
 }
 
-void signal_add(float s1[], float s2[], float out[],  int n){
-    for(size_t i = 0; i < n; i++)
-        out[i] = s1[i]+s2[i];
-}
-
-void signal_zero(float x[], size_t n) {
-    for (size_t i = 0; i < n; i++) x[i] = 0.0f;
-}
-
-void signal_copy(const float in[], float out[], size_t n) {
-    //TODO should I change this to memycopy?
-    for (size_t i = 0; i < n; i++) out[i] = in[i];
-}
-
-void signal_scale(float x[], size_t n, float a) {
-    for (size_t i = 0; i < n; i++) x[i] *= a;
-}
-
-float signal_sum(float x[], int n) {
-    float sum = 0;
-    for (size_t i = 0; i < n; i++) sum+= x[i];
-    return sum;
-}
-
-void signal_mult(float x[], float y[], float out[], int n) {
-    for (size_t i = 0; i < n; i++) out[i] = x[i] *  y[i];
-}
-
-void signal_accum(float out[], const float in[], size_t n, float w)
-{
-    for (size_t i = 0; i < n; i++) out[i] += w * in[i];
-}
-
-float signal_max_abs(const float x[], size_t n)
-{
-    float m = fabsf(x[0]);
-    for (size_t i = 1; i < n; i++) {
-        float a = fabsf(x[i]);
-        if (a > m) m = a;
-    }
-    return m;
-}
-
-void signal_normalize(float x[], size_t n)
-{
-    float m = signal_max_abs(x, n);
-    if (m <= 0.0f) return;
-    for (size_t i = 0; i < n; i++) x[i] /= m;
-}
 
 void draw_singal(float signal[], int n){
     float max, min;
@@ -545,9 +407,10 @@ int main(){
     FileMusic fm = (FileMusic){
         .data = buffer,
         .byte_size = f_size,
-        .format = ".wav"
+        .format = ".mp3"
     };
     
     draw_scene(&fm);
     return 0;
 }
+
