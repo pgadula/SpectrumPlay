@@ -9,11 +9,14 @@
 #define N 1024 
 #define LOG_N 32 
 #define M_2PI  M_PI*2
+#define SPEC_W 800
 
 const size_t sw = 1680;
 const size_t sh = 1024;
 const size_t half_sh = sh/2;
 const size_t r = 5;
+float zoom = 2;
+
 
 void log_spectrum(const float in[], float out[], int n, int out_n)
 {
@@ -29,21 +32,18 @@ void log_spectrum(const float in[], float out[], int n, int out_n)
 }
 
 void abs_spectrum(const float complex spec[],
-        float out[],
-        int n)
+                  float out[],
+                  int n)
 {
-    float max = 0.0f;
-
     for (int i = 0; i < n; i++) {
         float v = 20.0f * log10f(cabsf(spec[i]) + 1e-6f);
-        out[i] = v; 
-        if (out[i] > max)
-            max = out[i];
-    }
 
-    if (max > 0.0f) {
-        for (int i = 0; i < n; i++) 
-            out[i] /= max;
+        v = (v + 80.0f) / 80.0f;
+
+        if (v < 0.0f) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+
+        out[i] = v;
     }
 }
 
@@ -324,64 +324,230 @@ float complex *freq_complex;
 int current_size;
 int total_samples;
 int current_index = 0;
-void a_callback(void *bufferData, unsigned int frames){
+float spectrogram[SPEC_W][N/2];
+int spec_x = 0;
+
+void audio_callback(void *bufferData, unsigned int frames){
     current_size = frames;
     float *buffer = (float *)bufferData;
 
-    for(int frame = 0; frame < frames; frame++){
-        int idx = (current_index + frame) % total_samples;
+    for(int frame = 0; frame < frames; frame++)
         rb_write(&samples,  buffer[frame * 2 + 0]); //take only left channel
-    }
 
     current_index += frames;
 }
 
-int main(){ 
-    float windows[N];
-    float freq[N];
-    InitWindow(sw, sh, "Fourier Transform");
-    InitAudioDevice();
-    const char* audio_path = "./audio/arctic.mp3";
-    //const char* audio_path = "./audio/bass.wav";
-    Music m = LoadMusicStream(audio_path);
-    m.looping = false;
-    printf("Base audio info\n-sample rate: %d,\n-sample size: %d\n", m.stream.sampleRate, m.stream.sampleSize);
+typedef struct {
+    float t;
+    float r, g, b;
+} Stop;
 
-    total_samples = m.frameCount;
-    samples = rb_init(N);
-    printf("total samples%d\n", total_samples);
-    freq_complex = malloc(sizeof(float complex) * N);
+Color inferno(float t)
+{
+    // clamp
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
 
-    SetTargetFPS(60);
-    PlayMusicStream(m);
+    static const Stop stops[] = {
+        {0.0f, 0.0f, 0.0f, 0.0f},
+        {0.2f, 0.1f, 0.0f, 0.3f}, // purple
+        {0.4f, 0.5f, 0.0f, 0.2f}, // red
+        {0.6f, 0.9f, 0.3f, 0.0f}, // orange
+        {0.8f, 1.0f, 0.7f, 0.0f}, // yellow-orange
+        {1.0f, 1.0f, 1.0f, 0.8f}  // bright
+    };
 
-   AttachAudioStreamProcessor(m.stream, a_callback);
+    const int count = sizeof(stops) / sizeof(stops[0]);
 
-    while (!WindowShouldClose())
-    {
-        UpdateMusicStream(m);
-        BeginDrawing();
-        ClearBackground(BLACK);
+    for (int i = 0; i < count - 1; i++) {
+        if (t >= stops[i].t && t <= stops[i + 1].t) {
 
-        for (int i = 0; i < N; i++) {
-            float data = rb_read(&samples, i);
-            float w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
+            float range = stops[i + 1].t - stops[i].t;
+            float local = (t - stops[i].t) / range;
 
-            windows[i] = data * w;
+            float r = stops[i].r + local * (stops[i + 1].r - stops[i].r);
+            float g = stops[i].g + local * (stops[i + 1].g - stops[i].g);
+            float b = stops[i].b + local * (stops[i + 1].b - stops[i].b);
+
+            return (Color){
+                (unsigned char)(r * 255.0f),
+                (unsigned char)(g * 255.0f),
+                (unsigned char)(b * 255.0f),
+                255
+            };
         }
-
-        fft(windows, freq_complex, 1, N);
-        abs_spectrum(freq_complex, freq, N);
-
-        draw_signal_norm_area(windows, N, 0, sh/2, sw/2, sh/2, WHITE);
-        draw_spectrum_rects(freq, N/2, 5, 160, sw, sh/3, BLUE, BLUE);
-        //DrawLine(0, half_sh, sw, half_sh, WHITE);
-
-        EndDrawing();
     }
 
-    CloseAudioDevice();
-    CloseWindow();
+    return (Color){0, 0, 0, 255};
+}
+void draw_spectogram(int start_x, int start_y){
+    for (int x = 0; x < SPEC_W; x++) {
+        int idx = (spec_x + x) % SPEC_W;
 
+        for (int y = 0; y < N/2; y++) {
+            float v = spectrogram[idx][y];
+            v = powf(v, 0.4f);
+            DrawPixel(x+start_x, start_y + (N/2 - y), inferno(v));
+        }
+    }
+}
+
+const float minZoom = 1.0f;
+const float maxZoom = 5.0f;
+
+void draw_spectrogram_zoom(Texture2D spectrogram_texture, int start_x, int start_y)
+{
+    float zoom_width = sw / 2 * zoom;
+    float zoom_height = sh / 2 * zoom;
+
+    Rectangle sourceRec = {0, 0, SPEC_W, N / 2};
+
+    Rectangle destRec = {
+        start_x - zoom_width / 2,    // Center the texture on the screen
+        start_y - zoom_height / 2,
+        zoom_width,                  // Apply zoom to width
+        zoom_height                  // Apply zoom to height
+    };
+
+    Vector2 origin = {0, 0}; // Origin point for the texture (top-left)
+
+    DrawTexturePro(spectrogram_texture, sourceRec, destRec, origin, 0.0f, WHITE);
+}
+
+void update_zoom() {
+    // Keyboard zooming
+    if (IsKeyPressed(KEY_KP_ADD) || IsKeyPressed(KEY_EQUAL)) {
+        zoom += 0.1f;
+    }
+    if (IsKeyPressed(KEY_KP_SUBTRACT) || IsKeyPressed(KEY_MINUS)) {
+        zoom -= 0.1f;
+    }
+
+    // Mouse scroll zooming
+    float scroll = GetMouseWheelMove();
+    if (scroll > 0) {
+        zoom += 0.1f;  // Zoom in
+    } else if (scroll < 0) {
+        zoom -= 0.1f;  // Zoom out
+    }
+
+    // Keep zoom within limits
+    if (zoom < minZoom) zoom = minZoom;
+    if (zoom > maxZoom) zoom = maxZoom;
+}
+
+typedef struct {
+    char *data;
+    const char *format;
+    int byte_size;
+} FileMusic;
+
+void draw_scene(const FileMusic *file){
+
+        InitWindow(sw, sh, "Fourier Transform");
+        InitAudioDevice();
+
+        Music m = LoadMusicStreamFromMemory(file->format, file->data, file->byte_size); // Load music stream from data
+
+        RenderTexture2D spectogram_texture = LoadRenderTexture(SPEC_W, N/2);
+        float windows[N];
+        float freq[N];
+        m.looping = false; printf("Base audio info\n-sample rate: %d,\n-sample size: %d\n", m.stream.sampleRate, m.stream.sampleSize);
+        total_samples = m.frameCount;
+        samples = rb_init(N);
+        printf("total samples%d\n", total_samples);
+        freq_complex = malloc(sizeof(float complex) * N);
+
+        SetTargetFPS(60);
+        PlayMusicStream(m);
+
+        AttachAudioStreamProcessor(m.stream, audio_callback);
+
+        while (!WindowShouldClose())
+        {
+            UpdateMusicStream(m);
+            BeginDrawing();
+            ClearBackground(BLACK);
+            update_zoom();
+
+            for (int i = 0; i < N; i++) {
+                float data = rb_read(&samples, i);
+
+                //hann window apply
+                float w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
+                windows[i] = data * w;
+            }
+
+            fft(windows, freq_complex, 1, N);
+            abs_spectrum(freq_complex, freq, N);
+
+            draw_signal_norm_area(windows, N, 0, sh/2, sw/2, sh/2, WHITE);
+            draw_spectrum_rects(freq, N/2, 5, 160, sw, sh/3, BLUE, BLUE);
+
+            for(int i = 0; i < N/2; i++){
+                spectrogram[spec_x][i] = 0.8f * spectrogram[spec_x][i] + 0.2f * freq[i];
+            }
+            spec_x = (spec_x + 1 ) % SPEC_W;
+            draw_spectogram(sw/2, sh/2);
+
+            BeginTextureMode(spectogram_texture);
+            draw_spectrogram_zoom(spectogram_texture.texture, sw/2, sh/2);
+            for (int y = 0; y < N/2; y++) {
+                float v = spectrogram[spec_x][y];
+                v = powf(v, 0.4f);
+                Color c = inferno(v);
+                DrawPixel(SPEC_W-1, (N/2 - y), c);
+            }
+            EndTextureMode();
+
+            EndDrawing();
+        }
+
+        CloseAudioDevice();
+        CloseWindow();
+    }
+
+long int find_size(const FILE *fp) 
+{
+    // checking if the file exist or not
+    if (fp == NULL) {
+        printf("File Not Found!\n");
+        return -1;
+    }
+
+    fseek(fp, 0L, SEEK_END);
+
+    // calculating the size of the file
+    long int res = ftell(fp);
+
+    fseek(fp, 0L, SEEK_SET);
+
+    return res;
+}
+
+int main(){ 
+    //const char* audio_path = "./audio/arctic.mp3";
+    FILE *fptr;
+    const char* audio_path = "./audio/bass.wav";
+
+    fptr = fopen(audio_path, "rb");
+
+    long int f_size = find_size(fptr); 
+    if (f_size < 0){
+        return 0;
+    }
+    char *buffer = malloc(sizeof(char) * f_size);
+    printf("SIZE of file %ld", f_size);
+    fread(buffer, f_size, 1, fptr);
+
+    fclose(fptr);
+
+    FileMusic fm = (FileMusic){
+        .data = buffer,
+        .byte_size = f_size,
+        .format = ".wav"
+    };
+    
+    draw_scene(&fm);
     return 0;
 }
