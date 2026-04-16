@@ -1,4 +1,3 @@
-
 #define N 1024 
 #define LOG_N 32 
 #define M_2PI  M_PI*2
@@ -399,9 +398,9 @@ const char* get_extension(const char *path) {
 }
 
 int main(){ 
-    const char* audio_path = "./audio/arctic.mp3";
+    //const char* audio_path = "./audio/arctic.mp3";
     FILE *fptr;
-    //const char* audio_path = "./audio/bass.wav";
+    const char* audio_path = "./audio/bass.wav";
     const char *ext = get_extension(audio_path);
     fptr = fopen(audio_path, "rb");
 
