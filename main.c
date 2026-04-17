@@ -17,6 +17,7 @@
 #define FFT_IMPLEMENTATION
 #include "fft.h"
 
+#define GLSL_VERSION            330
 
 const size_t sw = 1680;
 const size_t sh = 1024;
@@ -97,7 +98,6 @@ void draw_spectrum_rects(const float values[], size_t n,
         int wi = (int)(barWf - 1.0f);
         if (wi < 1) wi = 1;
         int hi = (int)barH;
-
         DrawRectangle(xi, yi, wi, hi, fill);
         DrawRectangleLines(xi, yi, wi, hi, outline);
     }
@@ -309,9 +309,17 @@ void draw_scene(const FileMusic *file){
         InitWindow(sw, sh, "Fourier Transform");
         InitAudioDevice();
 
-        Music m = LoadMusicStreamFromMemory(file->format, file->data, file->byte_size); // Load music stream from data
+        Shader shader = LoadShader(0, TextFormat("resources/glsl%i/spectogram.fs", GLSL_VERSION));
+        if(!IsShaderValid(shader)){
+            fprintf(stderr, "Invalid shader syntax!");
+            return;
+        }
+         
+        int loc = GetShaderLocation(shader, "spectogramTex");
 
+        Music m = LoadMusicStreamFromMemory(file->format, file->data, file->byte_size); // Load music stream from data
         RenderTexture2D spectogram_texture = LoadRenderTexture(SPEC_W, N/2);
+
         float windows[N];
         float freq[N];
         m.looping = false; printf("Base audio info\n-sample rate: %d,\n-sample size: %d\n", m.stream.sampleRate, m.stream.sampleSize);
@@ -332,6 +340,7 @@ void draw_scene(const FileMusic *file){
             ClearBackground(BLACK);
             update_zoom();
 
+            SetShaderValueTexture(shader, loc, spectogram_texture.texture);
             for (int i = 0; i < N; i++) {
                 float data = rb_read(&samples, i);
 
@@ -349,18 +358,26 @@ void draw_scene(const FileMusic *file){
             for(int i = 0; i < N/2; i++){
                 spectrogram[spec_x][i] = 0.8f * spectrogram[spec_x][i] + 0.2f * freq[i];
             }
-            spec_x = (spec_x + 1 ) % SPEC_W;
-            draw_spectogram(sw/2, sh/2);
 
             BeginTextureMode(spectogram_texture);
-            draw_spectrogram_zoom(spectogram_texture.texture, sw/2, sh/2);
-            for (int y = 0; y < N/2; y++) {
-                float v = spectrogram[spec_x][y];
-                v = powf(v, 0.4f);
-                Color c = inferno(v);
-                DrawPixel(SPEC_W-1, (N/2 - y), c);
-            }
+                for (int y = 0; y < N/2; y++) {
+                    float v = spectrogram[spec_x][y];
+                    v = powf(v, 0.4f);
+                    Color c = inferno(v);
+                    DrawPixel(spec_x, (N/2 - y), c);
+                }
+                spec_x = (spec_x + 1 ) % SPEC_W;
             EndTextureMode();
+            BeginShaderMode(shader);
+                DrawTexturePro(
+                        spectogram_texture.texture,
+                        (Rectangle){0, 0, SPEC_W, -(N/2)},  
+                        (Rectangle){sw/2, sh/2, sw/2, sh/2},
+                        (Vector2){0,0},
+                        0,
+                        WHITE
+                        );
+            EndShaderMode();
 
             EndDrawing();
         }
@@ -398,9 +415,12 @@ const char* get_extension(const char *path) {
 }
 
 int main(){ 
-    //const char* audio_path = "./audio/arctic.mp3";
     FILE *fptr;
-    const char* audio_path = "./audio/bass.wav";
+    const char* audio_path;
+    
+    audio_path = "./audio/arctic.mp3";
+    audio_path = "./audio/bass.wav";
+
     const char *ext = get_extension(audio_path);
     fptr = fopen(audio_path, "rb");
 
