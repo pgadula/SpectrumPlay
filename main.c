@@ -11,6 +11,12 @@
 #include "raylib.h"
 #include <math.h>
 
+#define RB_IMPLEMENTATION
+#include "ring_buffer.h"
+
+#define FILE_MUSIC_UTILS_IMPLEMENTATION
+#include "music_file_utils.h"
+
 #define SIGNAL_IMPLEMENTATION 
 #include "signal_utils.h"
 
@@ -23,7 +29,6 @@ const size_t sw = 1680;
 const size_t sh = 1024;
 const size_t half_sh = sh/2;
 const size_t r = 5;
-float zoom = 2;
 
 void example(float in[], size_t n){
     int F = 1;
@@ -81,8 +86,6 @@ void draw_spectrum_rects(const float values[], size_t n,
     float barWf = w / (float)n;
     if (barWf < 1.0f) barWf = 1.0f;
 
-   // DrawLine((int)x0, (int)(y0 + h), (int)(x0 + w), (int)(y0 + h), WHITE);
-
     for (size_t i = 0; i < n; i++) {
         float a = values[i];
         if (a < 0.0f) a = 0.0f;
@@ -123,64 +126,6 @@ void draw_singal(float signal[], int n){
 }
 
 
-void draw_spectrum_labels(
-        float fs,
-        size_t n,
-        float x0, float y0, float w, float h,
-        size_t every,
-        Color col)
-{
-    if (n == 0 || every <= 0) return;
-
-    float barW = w / (float)n;
-    int fontSize = 12;
-
-    for (size_t k = 0; k < n; k += every) {
-        float x = x0 + k * barW;
-
-        float freq = (fs * (float)k) / (float)n;
-
-        DrawText(
-                TextFormat("%i",(int)freq),
-                (int)(x + 2),
-                (int)(y0 + h + 4),
-                fontSize,
-                col
-                );
-    }
-}
-
-
-typedef struct{
-    float *data;
-    int size;
-    int write_index;
-} RingBuffer;
-
-
-RingBuffer rb_init(int size){
-    float *data = malloc(sizeof(float) * size);
-    RingBuffer rg = {
-        .data = data,
-        .size = size,
-        .write_index = 0
-    }; 
-
-    return rg;
-}
-void rb_write(RingBuffer* rg, float data){
-    rg->data[rg->write_index % rg->size] = data;
-    rg->write_index+=1;
-}
-
-float rb_read(const RingBuffer* rg, int index){
-    if(rg->write_index < rg->size) return 0.0;
-    int idx = (rg->write_index - rg->size + index) % rg->size;
-    if (idx < 0) idx += rg->size;
-    return rg->data[idx];
-}
-
-
 RingBuffer samples;
 float complex *freq_complex;
 int current_size;
@@ -204,8 +149,7 @@ typedef struct {
     float r, g, b;
 } Stop;
 
-Color inferno(float t)
-{
+Color inferno(float t){
     // clamp
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
@@ -254,93 +198,40 @@ void draw_spectogram(int start_x, int start_y){
     }
 }
 
-const float minZoom = 1.0f;
-const float maxZoom = 5.0f;
-
-void draw_spectrogram_zoom(Texture2D spectrogram_texture, int start_x, int start_y)
-{
-    float zoom_width = sw / 2 * zoom;
-    float zoom_height = sh / 2 * zoom;
-
-    Rectangle sourceRec = {0, 0, SPEC_W, N / 2};
-
-    Rectangle destRec = {
-        start_x - zoom_width / 2,    // Center the texture on the screen
-        start_y - zoom_height / 2,
-        zoom_width,                  // Apply zoom to width
-        zoom_height                  // Apply zoom to height
-    };
-
-    Vector2 origin = {0, 0}; // Origin point for the texture (top-left)
-
-    DrawTexturePro(spectrogram_texture, sourceRec, destRec, origin, 0.0f, WHITE);
-}
-
-void update_zoom() {
-    // Keyboard zooming
-    if (IsKeyPressed(KEY_KP_ADD) || IsKeyPressed(KEY_EQUAL)) {
-        zoom += 0.1f;
-    }
-    if (IsKeyPressed(KEY_KP_SUBTRACT) || IsKeyPressed(KEY_MINUS)) {
-        zoom -= 0.1f;
-    }
-
-    // Mouse scroll zooming
-    float scroll = GetMouseWheelMove();
-    if (scroll > 0) {
-        zoom += 0.1f;  // Zoom in
-    } else if (scroll < 0) {
-        zoom -= 0.1f;  // Zoom out
-    }
-
-    // Keep zoom within limits
-    if (zoom < minZoom) zoom = minZoom;
-    if (zoom > maxZoom) zoom = maxZoom;
-}
-
-typedef struct {
-    char *data;
-    const char *format;
-    int byte_size;
-} FileMusic;
 
 void draw_scene(const FileMusic *file){
+        float windows[N];
+        float freq[N];
 
         InitWindow(sw, sh, "Fourier Transform");
         InitAudioDevice();
 
-        Shader shader = LoadShader(0, TextFormat("resources/glsl%i/spectogram.fs", GLSL_VERSION));
-        if(!IsShaderValid(shader)){
+        RenderTexture2D spectogram_texture = LoadRenderTexture(SPEC_W, N/2);
+        Music m = LoadMusicStreamFromMemory(file->format, file->data, file->byte_size); // Load music stream from data
+
+        Shader spectogram_shader = LoadShader(0, TextFormat("resources/glsl%i/spectogram.fs", GLSL_VERSION));
+
+        if(!IsShaderValid(spectogram_shader)){
             fprintf(stderr, "Invalid shader syntax!");
             return;
         }
          
-        int loc = GetShaderLocation(shader, "spectogramTex");
+        m.looping = false; 
 
-        Music m = LoadMusicStreamFromMemory(file->format, file->data, file->byte_size); // Load music stream from data
-        RenderTexture2D spectogram_texture = LoadRenderTexture(SPEC_W, N/2);
-
-        float windows[N];
-        float freq[N];
-        m.looping = false; printf("Base audio info\n-sample rate: %d,\n-sample size: %d\n", m.stream.sampleRate, m.stream.sampleSize);
         total_samples = m.frameCount;
         samples = rb_init(N);
-        printf("total samples%d\n", total_samples);
         freq_complex = malloc(sizeof(float complex) * N);
 
-        SetTargetFPS(60);
         PlayMusicStream(m);
-
         AttachAudioStreamProcessor(m.stream, audio_callback);
 
         while (!WindowShouldClose())
         {
+
             UpdateMusicStream(m);
             BeginDrawing();
             ClearBackground(BLACK);
-            update_zoom();
 
-            SetShaderValueTexture(shader, loc, spectogram_texture.texture);
             for (int i = 0; i < N; i++) {
                 float data = rb_read(&samples, i);
 
@@ -364,11 +255,12 @@ void draw_scene(const FileMusic *file){
                     float v = spectrogram[spec_x][y];
                     v = powf(v, 0.4f);
                     Color c = inferno(v);
-                    DrawPixel(spec_x, (N/2 - y), c);
+                    DrawPixel(SPEC_W - spec_x, (N/2 - y), c);
                 }
                 spec_x = (spec_x + 1 ) % SPEC_W;
             EndTextureMode();
-            BeginShaderMode(shader);
+
+            BeginShaderMode(spectogram_shader);
                 DrawTexturePro(
                         spectogram_texture.texture,
                         (Rectangle){0, 0, SPEC_W, -(N/2)},  
@@ -378,7 +270,6 @@ void draw_scene(const FileMusic *file){
                         WHITE
                         );
             EndShaderMode();
-
             EndDrawing();
         }
 
@@ -386,65 +277,14 @@ void draw_scene(const FileMusic *file){
         CloseWindow();
     }
 
-long int find_size(const FILE *fp) 
-{
-    // checking if the file exist or not
-    if (fp == NULL) {
-        printf("File Not Found!\n");
-        return -1;
-    }
-
-    fseek(fp, 0L, SEEK_END);
-
-    // calculating the size of the file
-    long int res = ftell(fp);
-
-    fseek(fp, 0L, SEEK_SET);
-
-    return res;
-}
-
-const char* get_extension(const char *path) {
-    const char *dot = strrchr(path, '.');
-
-    if (!dot || dot == path) {
-        return NULL;
-    }
-
-    return dot; 
-}
 
 int main(){ 
-    FILE *fptr;
     const char* audio_path;
     
     audio_path = "./audio/arctic.mp3";
-    audio_path = "./audio/bass.wav";
+    //audio_path = "./audio/bass.wav";
 
-    const char *ext = get_extension(audio_path);
-    fptr = fopen(audio_path, "rb");
-
-    if(fptr == NULL){
-        printf("Cannot open the file: %s", audio_path);
-        return 0;
-    }
-
-    long int f_size = find_size(fptr); 
-    if (f_size < 0){
-        printf("Invalid file");
-        return 0;
-    }
-    char *buffer = malloc(sizeof(char) * f_size);
-    fread(buffer, f_size, 1, fptr);
-
-    fclose(fptr);
-
-    FileMusic fm = (FileMusic){
-        .data = buffer,
-        .byte_size = f_size,
-        .format = ext 
-    };
-    
+    FileMusic fm = open_file_music(audio_path);    
     draw_scene(&fm);
     return 0;
 }
