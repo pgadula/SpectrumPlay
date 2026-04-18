@@ -278,11 +278,21 @@ void draw_scene(const FileMusic *file){
     }
 
 
-int main(){ 
+int main(int argc, char **argv){
     const char* audio_path;
-    
+
+    for (int i = 0; i < argc; i++) {
+        printf("%s\n", argv[i]);
+    }
+
     audio_path = "./audio/arctic.mp3";
     //audio_path = "./audio/bass.wav";
+
+    if(argc > 1){
+        audio_path = argv[1] ;
+    }
+    
+    printf("AUDIO PATH %s\n\n", audio_path);
 
     FileMusic fm = open_file_music(audio_path);    
     draw_scene(&fm);
