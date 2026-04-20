@@ -26,3 +26,36 @@ main_debug.o: main.c
 clean:
 	rm -f game game_debug *.o
 
+
+RAYLIB_WEB_LIB := third_party/raylib/lib/libraylib.web.a
+EMSDK_FLAGS := -Os -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=67108864 -DPLATFORM_WEB --shell-file $(CURDIR)/shell.html
+WEB_PROGS := fft.html
+
+.PHONY: web serve
+
+web: $(WEB_PROGS)
+
+# -------- Web builds --------
+
+fft.html: main.c
+	@mkdir -p docs
+	emcc -o docs/$@ $< -I$(RAYLIB_INC) $(RAYLIB_WEB_LIB) $(EMSDK_FLAGS)
+
+serve: web
+	cd docs && python3 -m http.server 8080
+
+RAYLIB_WEB_LIB := third_party/raylib/lib/libraylib.web.a
+EMSDK_FLAGS := -Os -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=67108864 -DPLATFORM_WEB --shell-file $(CURDIR)/shell.html
+
+WEB_PROGS := knn.html perceptron.html svm.html nonld.c
+
+.PHONY: web serve
+
+web: $(WEB_PROGS)
+# -------- Web builds --------
+
+
+fft.html: main.c
+	@mkdir -p docs
+	emcc -o docs/$@ $< -I$(RAYLIB_INC) $(RAYLIB_WEB_LIB) $(EMSDK_FLAGS)
+
