@@ -118,6 +118,7 @@ void sweapy(){
 }
 
 void draw_scene(const FileMusic *file){
+        bool isMusicPlaying = true;
         float window[N];
         float freq[N];
 
@@ -137,7 +138,6 @@ void draw_scene(const FileMusic *file){
         int window_loc = GetShaderLocation(audio_singal_shader, "window");
         int freq_loc = GetShaderLocation(spectrum_shader, "freq");
 
-
         Shader shaders[] = { spectogram_shader, spectrum_shader, audio_singal_shader};
         size_t n_shaders = sizeof(shaders) / sizeof(shaders[0]);
         for(int i = 0; i < n_shaders; i++){
@@ -149,11 +149,8 @@ void draw_scene(const FileMusic *file){
         } 
          
         m.looping = false; 
-
         samples = rb_init(N);
-
         freq_complex = malloc(sizeof(float complex) * N);
-
         PlayMusicStream(m);
 
         //sweapy();
@@ -169,6 +166,13 @@ void draw_scene(const FileMusic *file){
             BeginDrawing();
             ClearBackground(BLACK);
 
+            if(IsKeyPressed(KEY_SPACE)){
+                isMusicPlaying = !isMusicPlaying;
+                if(isMusicPlaying)
+                    PauseMusicStream(m);
+                else 
+                    PlayMusicStream(m);
+            }
             for(int i = 0; i < N; i++) {
                 float data = rb_read(&samples, i);
 
