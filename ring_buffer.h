@@ -6,11 +6,12 @@ typedef struct{
     float *data;
     int size;
     int write_index;
+    int last_read_index;
 } RingBuffer;
 
 RingBuffer rb_init(int size);
-void rb_write(RingBuffer* rg, float data);
-float rb_read(const RingBuffer* rg, int index);
+void rb_write(RingBuffer* rb, float data);
+float rb_read(const RingBuffer* rb, int index);
 
 #endif
 
@@ -18,23 +19,23 @@ float rb_read(const RingBuffer* rg, int index);
 
 RingBuffer rb_init(int size){
     float *data = malloc(sizeof(float) * size);
-    RingBuffer rg = {
+    RingBuffer rb = {
         .data = data,
         .size = size,
-        .write_index = 0
+        .write_index = 0,
     }; 
 
-    return rg;
+    return rb;
 }
-void rb_write(RingBuffer* rg, float data){
-    rg->data[rg->write_index % rg->size] = data;
-    rg->write_index+=1;
+void rb_write(RingBuffer* rb, float data){
+    rb->data[rb->write_index % rb->size] = data;
+    rb->write_index+=1;
 }
 
-float rb_read(const RingBuffer* rg, int index){
-    if(rg->write_index < rg->size) return 0.0;
-    int idx = (rg->write_index - rg->size + index) % rg->size;
-    if (idx < 0) idx += rg->size;
-    return rg->data[idx];
+float rb_read(const RingBuffer* rb, int index){
+    if(rb->write_index < rb->size) return 0.0;
+    int idx = (rb->write_index - rb->size + index) % rb->size;
+    if (idx < 0) idx += rb->size;
+    return rb->data[idx];
 }
 #endif

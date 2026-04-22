@@ -42,49 +42,6 @@ void audio_callback(void *bufferData, unsigned int frames){
         rb_write(&samples,  buffer[frame * 2 + 0]); //take only left channel
 }
 
-typedef struct {
-    float t;
-    float r, g, b;
-} Stop;
-
-Color inferno(float t){
-    // clamp
-    if (t < 0.0f) t = 0.0f;
-    if (t > 1.0f) t = 1.0f;
-
-    static const Stop stops[] = {
-        {0.0f, 0.0f, 0.0f, 0.0f},
-        {0.2f, 0.1f, 0.0f, 0.3f}, // purple
-        {0.4f, 0.5f, 0.0f, 0.2f}, // red
-        {0.6f, 0.9f, 0.3f, 0.0f}, // orange
-        {0.8f, 1.0f, 0.7f, 0.0f}, // yellow-orange
-        {1.0f, 1.0f, 1.0f, 0.8f}  // bright
-    };
-
-    const int count = sizeof(stops) / sizeof(stops[0]);
-
-    for (int i = 0; i < count - 1; i++) {
-        if (t >= stops[i].t && t <= stops[i + 1].t) {
-
-            float range = stops[i + 1].t - stops[i].t;
-            float local = (t - stops[i].t) / range;
-
-            float r = stops[i].r + local * (stops[i + 1].r - stops[i].r);
-            float g = stops[i].g + local * (stops[i + 1].g - stops[i].g);
-            float b = stops[i].b + local * (stops[i + 1].b - stops[i].b);
-
-            return (Color){
-                (unsigned char)(r * 255.0f),
-                (unsigned char)(g * 255.0f),
-                (unsigned char)(b * 255.0f),
-                255
-            };
-        }
-    }
-
-    return (Color){0, 0, 0, 255};
-}
-
 void test_impulse(){
     rb_write(&samples, 1);
     for(size_t i = 1; i < N; i++) rb_write(&samples, 0); 
@@ -155,11 +112,11 @@ void draw_scene(const FileMusic *file){
 
         //sweapy();
         //test_impulse();
-        //test_dc();
+        test_dc();
         //test_sine_bin();
 
 
-        AttachAudioStreamProcessor(m.stream, audio_callback);
+        //AttachAudioStreamProcessor(m.stream, audio_callback);
         while (!WindowShouldClose())
         {
             UpdateMusicStream(m);
@@ -175,9 +132,11 @@ void draw_scene(const FileMusic *file){
             }
             for(int i = 0; i < N; i++) {
                 float data = rb_read(&samples, i);
+                float w = 1;
 
                 //hann window apply
-                float w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
+                w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
+
                 window[i] = data * w;
             }
 
@@ -197,9 +156,9 @@ void draw_scene(const FileMusic *file){
                 BeginTextureMode(spectogram_texture);
                 for (int y = 0; y < N/2; y++) {
                     float v = spectrogram[spec_x][y];
-                    v = powf(v, 0.4f);
-                    Color c = inferno(v);
-                    DrawPixel(spec_x, (N/2 - 1 - y), c);
+                    //v = powf(v, 0.4f);
+                    v*=255;
+                    DrawPixel(spec_x, (N/2 - 1 - y), (Color){v, v, v, 255});
                 }
                 spec_x = (spec_x + 1 ) % SPEC_W;
                 EndTextureMode();
@@ -208,7 +167,7 @@ void draw_scene(const FileMusic *file){
             BeginShaderMode(spectrum_shader);
                 DrawTexturePro(
                         freq_texture.texture,
-                        (Rectangle){0, 0, N/2, 1},
+                        (Rectangle){0, 0, N/2, -1},
                         (Rectangle){sw/2, 0, sw/2, sh/2},
                         (Vector2){0,0},
                         0,
@@ -239,6 +198,7 @@ void draw_scene(const FileMusic *file){
                         WHITE
                         );
             EndShaderMode();
+            DrawFPS(50, 50);
             EndDrawing();
         }
 

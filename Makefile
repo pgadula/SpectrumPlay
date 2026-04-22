@@ -1,10 +1,12 @@
 CC      := cc
-CFLAGS  := -O2 -Wall -Wextra -Ithird_party/raylib/include
+CFLAGS  := -O2 -Wall -Wextra -Ithird_party/raylib/include 
+CFLAGS += -DPLATFORM_DESKTOP
+
 CFLAGS_DEBUG := -g -O0 -Wall -Wextra -Ithird_party/raylib/include
 
 LDFLAGS := third_party/raylib/lib/libraylib.a \
 		   -lm -ldl -lpthread \
-		   -lGL -lX11 -lXrandr -lXi -lXcursor -lXinerama
+		   -lGL -lX11 -lXrandr -lXi -lXcursor -lXinerama -DPLATFORM_DESKTOP
 
 all: game
 
