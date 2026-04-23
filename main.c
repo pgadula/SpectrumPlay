@@ -78,6 +78,8 @@ void draw_scene(const FileMusic *file){
         bool isMusicPlaying = true;
         float window[N];
         float freq[N];
+        int n_bars = 32;
+        int color_schema = 8;
 
         InitWindow(sw, sh, "Fourier Transform");
         InitAudioDevice();
@@ -94,6 +96,10 @@ void draw_scene(const FileMusic *file){
 
         int window_loc = GetShaderLocation(audio_singal_shader, "window");
         int freq_loc = GetShaderLocation(spectrum_shader, "freq");
+        int n_bars_loc = GetShaderLocation(spectrum_shader, "n_bars");
+
+        int color_schema_loc1 = GetShaderLocation(spectrum_shader, "color_schema");
+        int color_schema_loc2 = GetShaderLocation(spectogram_shader, "color_schema");
 
         Shader shaders[] = { spectogram_shader, spectrum_shader, audio_singal_shader};
         size_t n_shaders = sizeof(shaders) / sizeof(shaders[0]);
@@ -112,17 +118,20 @@ void draw_scene(const FileMusic *file){
 
         //sweapy();
         //test_impulse();
-        test_dc();
+//        test_dc();
         //test_sine_bin();
 
 
-        //AttachAudioStreamProcessor(m.stream, audio_callback);
+        AttachAudioStreamProcessor(m.stream, audio_callback);
         while (!WindowShouldClose())
         {
             UpdateMusicStream(m);
             BeginDrawing();
             ClearBackground(BLACK);
-
+            if (IsKeyPressed(KEY_ONE))   color_schema = 0;
+            if (IsKeyPressed(KEY_TWO))   color_schema = 1;
+            if (IsKeyPressed(KEY_THREE)) color_schema = 2;
+            if (IsKeyPressed(KEY_FOUR))  color_schema = 3;
             if(IsKeyPressed(KEY_SPACE)){
                 isMusicPlaying = !isMusicPlaying;
                 if(isMusicPlaying)
@@ -130,10 +139,21 @@ void draw_scene(const FileMusic *file){
                 else 
                     PlayMusicStream(m);
             }
+
+            if(IsKeyPressed(KEY_A)){
+                n_bars*=2;
+                if(n_bars > N/2) 
+                    n_bars = N/2;
+            }
+            if(IsKeyPressed(KEY_D)){
+                n_bars/=2;
+                if(n_bars <= 2) n_bars = 2;
+            }
             for(int i = 0; i < N; i++) {
                 float data = rb_read(&samples, i);
                 float w = 1;
 
+                float x=0;
                 //hann window apply
                 w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
 
@@ -141,16 +161,24 @@ void draw_scene(const FileMusic *file){
             }
 
             fft(window, freq_complex, 1, N);
-            abs_spectrum(freq_complex, freq, N);
+            abs_spectrum(freq_complex, freq, N/2);
+            for(int i = 0; i < N/2; i++){
+                float v = freq[i];
+                float freqNorm = (float)i / (N/2);
+                v *= powf(freqNorm, 0.4f);
+                freq[i] = v;
+            }
 
             SetShaderValueV(audio_singal_shader, window_loc, window, SHADER_UNIFORM_FLOAT, N);
             SetShaderValueV(spectrum_shader, freq_loc, freq, SHADER_UNIFORM_FLOAT, N/2);
+            SetShaderValue(spectrum_shader, n_bars_loc, &n_bars, SHADER_UNIFORM_INT);
+
+            SetShaderValue(spectrum_shader, color_schema_loc1, &color_schema, SHADER_UNIFORM_INT);
+            SetShaderValue(spectogram_shader, color_schema_loc2, &color_schema, SHADER_UNIFORM_INT);
 
             for(int i = 0; i < N/2; i++){
                 spectrogram[spec_x][i] = freq[i];
             }
-
-
 
             if(samples.write_index > N){
                 BeginTextureMode(spectogram_texture);
