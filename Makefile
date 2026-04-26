@@ -1,13 +1,20 @@
-CC      := cc
-CFLAGS  := -O2 -Wall -Wextra -Ithird_party/raylib/include 
-CFLAGS += -DPLATFORM_DESKTOP
+# -------- COMPILER --------
+CC := cc
 
-CFLAGS_DEBUG := -g -O0 -Wall -Wextra -Ithird_party/raylib/include
+# -------- COMMON --------
+RAYLIB_INC := third_party/raylib/include
+RAYLIB_LIB_DESKTOP := third_party/raylib/lib/libraylib.a
+RAYLIB_LIB_WEB := third_party/raylib/lib/libraylib.web.a
 
-LDFLAGS := third_party/raylib/lib/libraylib.a \
-		   -lm -ldl -lpthread \
-		   -lGL -lX11 -lXrandr -lXi -lXcursor -lXinerama -DPLATFORM_DESKTOP
+# -------- DESKTOP --------
+CFLAGS := -O2 -Wall -Wextra -I$(RAYLIB_INC) -DPLATFORM_DESKTOP
+CFLAGS_DEBUG := -g -O0 -Wall -Wextra -I$(RAYLIB_INC) -DPLATFORM_DESKTOP
 
+LDFLAGS := $(RAYLIB_LIB_DESKTOP) \
+	-lm -ldl -lpthread \
+	-lGL -lX11 -lXrandr -lXi -lXcursor -lXinerama
+
+# -------- TARGETS --------
 all: game
 
 game: main.o
@@ -16,7 +23,7 @@ game: main.o
 main.o: main.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# --- DEBUG ---
+# -------- DEBUG --------
 debug: game_debug
 
 game_debug: main_debug.o
@@ -25,39 +32,34 @@ game_debug: main_debug.o
 main_debug.o: main.c
 	$(CC) $(CFLAGS_DEBUG) -c $< -o $@
 
-clean:
-	rm -f game game_debug *.o
+# -------- WEB --------
+EMSDK_FLAGS := -Os \
+	-s USE_GLFW=3 \
+	-s ASYNCIFY \
+	-s TOTAL_MEMORY=67108864 \
+	-DPLATFORM_WEB \
+	--shell-file $(CURDIR)/shell.html \
+	--preload-file resources \
+	--preload-file audio
 
-
-RAYLIB_WEB_LIB := third_party/raylib/lib/libraylib.web.a
-EMSDK_FLAGS := -Os -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=67108864 -DPLATFORM_WEB --shell-file $(CURDIR)/shell.html
-WEB_PROGS := fft.html
+WEB_TARGET := fft.html
 
 .PHONY: web serve
 
-web: $(WEB_PROGS)
+web: $(WEB_TARGET)
 
-# -------- Web builds --------
-
-fft.html: main.c
+$(WEB_TARGET): main.c
 	@mkdir -p docs
-	emcc -o docs/$@ $< -I$(RAYLIB_INC) $(RAYLIB_WEB_LIB) $(EMSDK_FLAGS)
+	emcc $< \
+		-o docs/$@ \
+		-I$(RAYLIB_INC) \
+		$(RAYLIB_LIB_WEB) \
+		$(EMSDK_FLAGS)
 
 serve: web
 	cd docs && python3 -m http.server 8080
 
-RAYLIB_WEB_LIB := third_party/raylib/lib/libraylib.web.a
-EMSDK_FLAGS := -Os -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=67108864 -DPLATFORM_WEB --shell-file $(CURDIR)/shell.html
-
-WEB_PROGS := knn.html perceptron.html svm.html nonld.c
-
-.PHONY: web serve
-
-web: $(WEB_PROGS)
-# -------- Web builds --------
-
-
-fft.html: main.c
-	@mkdir -p docs
-	emcc -o docs/$@ $< -I$(RAYLIB_INC) $(RAYLIB_WEB_LIB) $(EMSDK_FLAGS)
-
+# -------- CLEAN --------
+clean:
+	rm -f game game_debug *.o
+	rm -rf docs
