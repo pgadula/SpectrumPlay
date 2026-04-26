@@ -175,6 +175,7 @@ select {
         </label>
         <input id="gain" type="range" min="0.1" max="10" value="1" step="0.1">
     </div>
+    <button id="mic-btn">Start mic</button>
     <div id="hint">
         Drop audio file here<br>
         Keys: 1–4 colors · A/D bars · Space pause
@@ -199,6 +200,76 @@ var Module = {
 {{{ SCRIPT }}}
 
 <script>
+let micStream = null;
+let audioCtx = null;
+let source = null;
+let processor = null;
+let micOn = false;
+
+const btn = document.getElementById("mic-btn");
+
+btn.addEventListener("click", async () => {
+
+    if (!micOn) {
+        // START
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        audioCtx = new AudioContext();
+        source = audioCtx.createMediaStreamSource(micStream);
+
+        processor = audioCtx.createScriptProcessor(1024, 1, 1);
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+
+        processor.onaudioprocess = (e) => {
+            const input = e.inputBuffer.getChannelData(0);
+
+            const ptr = Module._malloc(input.length * 4);
+            (Module.HEAPF32 || HEAPF32).set(input, ptr / 4);
+
+            Module.ccall(
+                "push_data",
+                null,
+                ["number", "number"],
+                [ptr, input.length]
+            );
+
+            Module._free(ptr);
+        };
+
+        micOn = true;
+        btn.textContent = "Stop mic";
+
+    } else {
+        // STOP
+
+        if (processor) {
+            processor.disconnect();
+            processor.onaudioprocess = null;
+        }
+
+        if (source) {
+            source.disconnect();
+        }
+
+        if (audioCtx) {
+            audioCtx.close();
+        }
+
+        if (micStream) {
+            micStream.getTracks().forEach(track => track.stop());
+        }
+
+        micStream = null;
+        audioCtx = null;
+        source = null;
+        processor = null;
+
+        micOn = false;
+        btn.textContent = "Start mic";
+    }
+});
 async function loadAudioFile(file) {
     if (!file) return;
 

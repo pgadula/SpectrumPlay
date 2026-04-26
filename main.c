@@ -186,6 +186,15 @@ void load_music(const char *audio_path){
 #if defined(PLATFORM_WEB)
 EMSCRIPTEN_KEEPALIVE
 #endif
+void push_data(float *data, int count) {
+    for (int i = 0; i < count; i++) {
+        rb_write(&app.samples, data[i]);
+    }
+}
+
+#if defined(PLATFORM_WEB)
+EMSCRIPTEN_KEEPALIVE
+#endif
 void set_gain_web(float value) {
     if (value < 0.1f) value = 0.1f;
     if (value > 10.0f) value = 10.0f;
