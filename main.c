@@ -153,12 +153,61 @@ void app_init(){
 }
 
 void load_music(const char *audio_path){
-    FileMusic file = open_file_music(audio_path);    
-    app.music = LoadMusicStreamFromMemory(file.format, file.data, file.byte_size); 
+    if (app.musicLoaded) {
+        StopMusicStream(app.music);
+        DetachAudioStreamProcessor(app.music.stream, audio_callback);
+        UnloadMusicStream(app.music);
+        app.musicLoaded = false;
+    }
+
+    FileMusic file = open_file_music(audio_path);
+
+    app.music = LoadMusicStreamFromMemory(
+        file.format,
+        file.data,
+        file.byte_size
+    );
+
+    if (!IsMusicValid(app.music)) {
+        fprintf(stderr, "Failed to load music: %s\n", audio_path);
+        return;
+    }
+
+    app.music.looping = false;
     app.musicLoaded = true;
+    app.isMusicPlaying = true;
 
-
+    PlayMusicStream(app.music);
+    AttachAudioStreamProcessor(app.music.stream, audio_callback);
 }
+
+#if defined(PLATFORM_WEB)
+EMSCRIPTEN_KEEPALIVE
+#endif
+void load_music_web(unsigned char *data, int size, const char *format) {
+
+    if (app.musicLoaded) {
+        StopMusicStream(app.music);
+        DetachAudioStreamProcessor(app.music.stream, audio_callback);
+        UnloadMusicStream(app.music);
+        app.musicLoaded = false;
+    }
+
+    app.music = LoadMusicStreamFromMemory(format, data, size);
+
+    if (!IsMusicValid(app.music)) {
+        printf("Failed to load from bytes\n");
+        return;
+    }
+
+    app.music.looping = false;
+    app.musicLoaded = true;
+    app.isMusicPlaying = true;
+
+    PlayMusicStream(app.music);
+    AttachAudioStreamProcessor(app.music.stream, audio_callback);
+}
+
 void app_deinit(){
     DetachAudioStreamProcessor(app.music.stream, audio_callback);
     CloseAudioDevice();
@@ -301,8 +350,11 @@ int main(int argc, char **argv){
     printf("AUDIO PATH %s\n\n", audio_path);
 
     app_init();
-
+#if !defined(PLATFORM_WEB)
     load_music(audio_path);
+#endif
+
+draw_scene();
     draw_scene();
     app_deinit();
     return 0;

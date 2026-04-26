@@ -1,29 +1,48 @@
-
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-* { margin: 0; padding: 0; overflow: hidden; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
 body {
     background: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     width: 100vw;
     height: 100vh;
+    overflow: hidden;
 }
+
 canvas {
     display: block;
     width: 100vw;
     height: calc(100vw * 1024 / 1920);
     max-height: 100vh;
     max-width: calc(100vh * 1920 / 1024);
+    margin: auto;
+}
+
+#ui {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 10;
+    color: white;
+    font-family: sans-serif;
+}
+
+#audio-file {
+    color: white;
 }
 </style>
 </head>
+
 <body>
-<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+<div id="ui">
+    <input id="audio-file" type="file" accept="audio/*">
+</div>
+
+<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
 <script>
 var Module = {
     canvas: (function() {
@@ -34,6 +53,33 @@ var Module = {
     })()
 };
 </script>
+
 {{{ SCRIPT }}}
+
+<script>
+document.getElementById("audio-file").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const data = new Uint8Array(await file.arrayBuffer());
+
+    const ptr = Module._malloc(data.length);
+    HEAPU8.set(data, ptr);
+
+    // wyciągamy rozszerzenie
+    let ext = ".wav";
+    if (file.name.includes(".")) {
+        ext = "." + file.name.split(".").pop().toLowerCase();
+    }
+
+    Module.ccall(
+        "load_music_web",
+        null,
+        ["number", "number", "string"],
+        [ptr, data.length, ext]
+    );
+});
+</script>
+
 </body>
 </html>
