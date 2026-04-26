@@ -37,7 +37,7 @@ EMSDK_FLAGS := -Os \
 	-s USE_GLFW=3 \
 	-s ASYNCIFY \
 	-s TOTAL_MEMORY=67108864 \
-	-s EXPORTED_FUNCTIONS='["_main","_load_music_web", "_malloc"]' \
+-s EXPORTED_FUNCTIONS='["_main","_load_music_web","_set_bars_web","_set_color_schema_web","_set_gain_web","_malloc"]' \
 	-s EXPORTED_RUNTIME_METHODS='["ccall","FS"]' \
 	-DPLATFORM_WEB \
 	--shell-file $(CURDIR)/shell.html \
