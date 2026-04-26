@@ -42,7 +42,7 @@ EMSDK_FLAGS := -Os \
 	--preload-file resources \
 	--preload-file audio
 
-WEB_TARGET := fft.html
+WEB_TARGET := index.html
 
 .PHONY: web serve
 

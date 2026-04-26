@@ -25,7 +25,12 @@
 #define FFT_IMPLEMENTATION
 #include "fft.h"
 
-#define GLSL_VERSION            330
+
+#if defined(PLATFORM_WEB)
+    #define GLSL_VERSION 100
+#else
+    #define GLSL_VERSION 330
+#endif
 
 const size_t sw = 1680;
 const size_t sh = 1024;
@@ -105,6 +110,17 @@ void app_init(){
     app.spectogram_texture = LoadRenderTexture(SPEC_W, N/2);
     app.freq_texture = LoadRenderTexture(N/2, 1);
     app.audio_texture = LoadRenderTexture(N, 1);
+    BeginTextureMode(app.spectogram_texture);
+    ClearBackground(BLACK);
+    EndTextureMode();
+
+    BeginTextureMode(app.freq_texture);
+    ClearBackground(BLACK);
+    EndTextureMode();
+
+    BeginTextureMode(app.audio_texture);
+    ClearBackground(BLACK);
+    EndTextureMode();
 
 
     app.spectogram_shader = LoadShader(0, TextFormat("resources/glsl%i/spectogram.fs", GLSL_VERSION));
@@ -276,7 +292,7 @@ int main(int argc, char **argv){
     }
 
     //audio_path = "./audio/arctic.mp3";
-    audio_path = "./audio/bass.wav";
+    audio_path = "./audio/sweep.wav";
 
     if(argc > 1){
         audio_path = argv[1] ;
