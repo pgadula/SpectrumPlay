@@ -32,7 +32,7 @@
     #define GLSL_VERSION 330
 #endif
 
-const size_t sw = 1680;
+const size_t sw = 1920;
 const size_t sh = 1024;
 
 typedef struct {
