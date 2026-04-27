@@ -7,6 +7,7 @@
 #include <complex.h>
 #include <stdio.h>
 #include "raylib.h"
+#include "test_signal.h"
 #include <math.h>
 
 #if defined(PLATFORM_WEB)
@@ -59,7 +60,9 @@ typedef struct {
     Shader audio_singal_shader;
     Shader spectrum_shader;
 
-    RenderTexture2D  spectogram_texture; 
+    Texture2D spectogram_texture;
+    Color spec_column[N/2];
+
     RenderTexture2D freq_texture;
     RenderTexture2D audio_texture;
     Music music;
@@ -73,48 +76,18 @@ void audio_callback(void *bufferData, unsigned int frames){
         rb_write(&app.samples,  buffer[frame * 2 + 0]); //take only left channel
 }
 
-void test_impulse(){
-    rb_write(&app.samples, 1);
-    for(size_t i = 1; i < N; i++) rb_write(&app.samples, 0); 
-}
-
-void test_dc(){
-    for(size_t i = 0; i < N; i++) rb_write(&app.samples, 1);
-}
-
-void test_sine_bin(){
-    int k = 32;
-
-    for(size_t i = 0; i < N; i++){
-        rb_write(&app.samples, sinf(2.0f * M_PI * k * i / N));
-    }
-}
-
-void sweapy(){
-    float phase = 0.0f;
-    float f0 = 2.0f;
-    float f1 = 500.0f;
-
-    for (int i = 0; i < N; i++) {
-        float t = (float)i / N;
-        float f = f0 + (f1 - f0) * t;
-
-        phase += 2.0f * M_PI * f / N; // integracja częstotliwości
-
-        rb_write(&app.samples, sinf(phase));
-    }
-}
 void app_init(){
     InitWindow(sw, sh, "Fourier Transform");
     InitAudioDevice();
 
     app.gain = 1.0;
-    app.spectogram_texture = LoadRenderTexture(SPEC_W, N/2);
+    Image spec_img = GenImageColor(SPEC_W, N/2, BLACK);
+    app.spectogram_texture = LoadTextureFromImage(spec_img);
+    UnloadImage(spec_img);
+    SetTextureFilter(app.spectogram_texture, TEXTURE_FILTER_POINT);
+
     app.freq_texture = LoadRenderTexture(N/2, 1);
     app.audio_texture = LoadRenderTexture(N, 1);
-    BeginTextureMode(app.spectogram_texture);
-    ClearBackground(BLACK);
-    EndTextureMode();
 
     BeginTextureMode(app.freq_texture);
     ClearBackground(BLACK);
@@ -313,17 +286,31 @@ void update_frame(){
         app.spectrogram[app.spec_x][i] = app.freq[i];
     }
 
-    if(app.samples.write_index > N){
-        BeginTextureMode(app.spectogram_texture);
-        for (int y = 0; y < N/2; y++) {
-            float v = app.spectrogram[app.spec_x][y];
-            //v = powf(v, 0.4f);
-            v*=255;
-            DrawPixel(app.spec_x, (N/2 - 1 - y), (Color){v, v, v, 255});
+    if (app.samples.write_index > N) {
+        int h = N / 2;
+
+        for (int y = 0; y < h; y++) {
+            float v = app.freq[y];
+
+            if (v < 0.0f) v = 0.0f;
+            if (v > 1.0f) v = 1.0f;
+
+            unsigned char c = (unsigned char)(v * 255.0f);
+
+            app.spec_column[h - 1 - y] = (Color){ c, c, c, 255 };
         }
-        app.spec_x = (app.spec_x + 1 ) % SPEC_W;
-        EndTextureMode();
-    }
+
+    Rectangle col = {
+        .x = app.spec_x,
+        .y = 0,
+        .width = 1,
+        .height = h
+    };
+
+    UpdateTextureRec(app.spectogram_texture, col, app.spec_column);
+
+    app.spec_x = (app.spec_x + 1) % SPEC_W;
+}
 
     BeginShaderMode(app.spectrum_shader);
     DrawTexturePro(
@@ -351,13 +338,14 @@ void update_frame(){
 
     BeginShaderMode(app.spectogram_shader);
     DrawTexturePro(
-            app.spectogram_texture.texture,
-            (Rectangle){0, 0, SPEC_W, -(N/2)},  
+            app.spectogram_texture,
+            (Rectangle){0, 0, SPEC_W, -(N/2)},
             (Rectangle){0, sh/2, sw, sh/2},
             (Vector2){0,0},
             0,
             WHITE
             );
+    EndShaderMode();
     EndShaderMode();
     DrawFPS(50, 50);
     EndDrawing();
