@@ -62,7 +62,6 @@ typedef struct {
 
     Texture2D spectogram_texture;
     Color spec_column[N/2];
-
     RenderTexture2D freq_texture;
     RenderTexture2D audio_texture;
     Music music;
@@ -109,11 +108,11 @@ void app_init(){
     app.color_schema_loc1 = GetShaderLocation(app.spectrum_shader, "color_schema");
     app.color_schema_loc2 = GetShaderLocation(app.spectogram_shader, "color_schema");
     app.n_bars = 32;
-    app.color_schema = 0;
+    app.color_schema = 4;
     app.spec_x = 0;
 
     app.music.looping = false; 
-    app.samples = rb_init(N);
+    app.samples = rb_init(N*3);
     app.freq_complex = malloc(sizeof(float complex) * N);
 
     Shader shaders[] = { app.spectogram_shader, app.spectrum_shader, app.audio_singal_shader};
@@ -126,6 +125,19 @@ void app_init(){
         }
     } 
 }
+
+
+// ###
+//   ###
+//     ###
+//       ###
+//
+// 
+// w = 3  
+// idx
+//         0-3
+//         2-5
+//         4-7
 
 void load_music(const char *audio_path){
     if (app.musicLoaded) {
@@ -252,17 +264,25 @@ void update_frame(){
         app.n_bars/=2;
         if(app.n_bars <= 2) app.n_bars = 2;
     }
+
+   // for(int i = 0; i < N; i++) {
+   //     float data = rb_read(&app.samples, i);
+   //     float w = 1;
+
+   //     //hann window apply
+   //     w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
+
+   //     app.window[i] = data * w;
+   // }
+    rb_read_window(&app.samples, N, app.window);
+    
     for(int i = 0; i < N; i++) {
-        float data = rb_read(&app.samples, i);
-        float w = 1;
+        float w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
+        app.window[i] *= w;
 
-        float x=0;
-        //hann window apply
-        w = 0.5f * (1 - cosf((2 * PI * i) / (N - 1)));
-
-        app.window[i] = data * w;
     }
 
+//    dft(app.window, app.freq_complex, N);
     fft(app.window, app.freq_complex, 1, N);
     abs_spectrum(app.freq_complex, app.freq, N/2);
     for(int i = 0; i < N/2; i++){
