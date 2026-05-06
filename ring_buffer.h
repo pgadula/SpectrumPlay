@@ -39,25 +39,13 @@ float rb_read(const RingBuffer* rb, int index){
     return rb->data[idx];
 }
 
-// ###
-//   ###
-//     ###
-//       ###
-//
-// 
-// w = 3  
-//         idx
-//         0-3
-//         2-5
-//         4-7
-// start = 0 end = 3
-// start = end - (1/4 * window) end = window + (end - (1/4 * window))
-
 void rb_read_window(RingBuffer* rb, int window_size, float *output){
-    int hop_size = 0.2 * window_size;
+    int hop_size = 0.25 * window_size;
 
     int end = rb->last_read_index + hop_size;
     int start = end - window_size;
+    if(start < 0)
+        start = 0;
 
     for (int j = 0; j < window_size; j++){
         int i = start + j;

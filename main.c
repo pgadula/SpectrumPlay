@@ -47,7 +47,9 @@ typedef struct {
 
     float gain;
     float window[N];
-    float freq[N];
+
+    float freq[N/2];
+    float display_freq[N/2];
     int n_bars;
     int color_schema;
 
@@ -114,6 +116,7 @@ void app_init(){
     app.music.looping = false; 
     app.samples = rb_init(N*3);
     app.freq_complex = malloc(sizeof(float complex) * N);
+    memset(app.display_freq, 0, sizeof(app.display_freq));
 
     Shader shaders[] = { app.spectogram_shader, app.spectrum_shader, app.audio_singal_shader};
     size_t n_shaders = sizeof(shaders) / sizeof(shaders[0]);
@@ -282,21 +285,32 @@ void update_frame(){
 
     }
 
-//    dft(app.window, app.freq_complex, N);
     fft(app.window, app.freq_complex, 1, N);
     abs_spectrum(app.freq_complex, app.freq, N/2);
     for(int i = 0; i < N/2; i++){
         float v = app.freq[i];
+        float prev = app.display_freq[i];
+
         float freqNorm = (float)i / (N/2);
         v *= powf(freqNorm, 0.4f);
         v *= app.gain;
+
         if (v < 0.0f) v = 0.0f;
         if (v > 1.0f) v = 1.0f;
+
         app.freq[i] = v;
+
+        if (isnan(prev)) {
+            printf("%f \n", prev);
+            // x jest NaN
+        }
+
+        float display = prev + (v - prev) * 0.1f;
+        app.display_freq[i] = v; 
     }
 
     SetShaderValueV(app.audio_singal_shader, app.window_loc, app.window, SHADER_UNIFORM_FLOAT, N);
-    SetShaderValueV(app.spectrum_shader, app.freq_loc, app.freq, SHADER_UNIFORM_FLOAT, N/2);
+    SetShaderValueV(app.spectrum_shader, app.freq_loc, app.display_freq, SHADER_UNIFORM_FLOAT, N/2);
     SetShaderValue(app.spectrum_shader, app.n_bars_loc, &app.n_bars, SHADER_UNIFORM_INT);
 
     SetShaderValue(app.spectrum_shader, app.color_schema_loc1, &app.color_schema, SHADER_UNIFORM_INT);
@@ -404,8 +418,6 @@ int main(int argc, char **argv){
 #if !defined(PLATFORM_WEB)
     load_music(audio_path);
 #endif
-
-draw_scene();
     draw_scene();
     app_deinit();
     return 0;

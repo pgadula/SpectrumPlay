@@ -3,9 +3,12 @@
 
 #include <complex.h>
 #include <math.h>
+#include <assert.h>
 
 void fft(const float in[], float complex out[], size_t stride,  size_t n);
+void fft_complex(const float complex in[], float complex out[], size_t stride,  size_t n);
 void dft(float in[], float complex out[], size_t n);
+void fft_img(const float in[], float complex out[], size_t w, size_t h);
 
 #endif
 
@@ -49,6 +52,63 @@ void fft(const float in[], float complex out[], size_t stride,  size_t n){
     }
 }
 
+void fft_complex(const float complex in[], float complex out[], size_t stride,  size_t n){
+    if(n == 1){
+        out[0] = in[0];
+        return;
+    }
+    fft_complex(in, out, stride * 2, n/2);
+    fft_complex(in + stride, out + n / 2, stride * 2, n/2);
+    for(size_t k = 0; k < n/2; k++){
+        float c = (float)k / (float)n;
+        float angle = -2 * M_PI * c;
+        float complex tw = cexpf(angle * I);
+        float complex e  = out[k];
+        float complex o  = out[k + n / 2];
+        float complex t = tw * o;
+         out[k]       =  e + t;
+         out[k + n / 2] =  e - t;
+    }
+}
+
+
+// Source - https://stackoverflow.com/a/600306
+// Posted by Greg Hewgill, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-04-29, License - CC BY-SA 4.0
+bool is_power_of_two(size_t x){
+    return (x & (x - 1)) == 0;
+}
+
+void fft_img(const float in[], float complex out[], size_t w, size_t h) {
+    assert(is_power_of_two(w));
+    assert(is_power_of_two(h));
+
+    float complex *row = malloc(sizeof *row * w * h);
+    float complex *col = malloc(sizeof *col * h);
+
+    if (row == NULL || col == NULL) {
+        fprintf(stderr, "Cannot allocate more memory\n");
+        free(row);
+        free(col);
+        exit(EXIT_FAILURE);
+    }
+
+    for (size_t y = 0; y < h; y++) {
+        size_t offset = y * w;
+        fft(in + offset, row + offset, 1, w);
+    } 
+
+    for (size_t x = 0; x < w; x++) {
+        fft_complex(row + x, col, w, h);
+        for (size_t y = 0; y < h; y++) {
+            float complex v = col[y]; 
+            out[x * w + y] = col[y];
+        }
+    }
+
+    free(row);
+    free(col);
+}
 void dft(float in[], float complex out[], size_t n){
     for(size_t f = 0; f < n; f++){
         float complex freq_signal[n];
