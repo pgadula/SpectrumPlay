@@ -93,16 +93,15 @@ void fft_img(const float in[], float complex out[], size_t w, size_t h) {
         exit(EXIT_FAILURE);
     }
 
-    for (size_t y = 0; y < h; y++) {
-        size_t offset = y * w;
+    for(size_t dy = 0; dy < h; dy++){
+        size_t offset = dy * w;
         fft(in + offset, row + offset, 1, w);
-    } 
+    }
 
-    for (size_t x = 0; x < w; x++) {
-        fft_complex(row + x, col, w, h);
-        for (size_t y = 0; y < h; y++) {
-            float complex v = col[y]; 
-            out[x * w + y] = col[y];
+    for(size_t dx = 0; dx < w; dx++){
+        fft_complex(row + dx, col, w, h);
+        for(size_t dy = 0; dy < h; dy++){
+            out[dy * w + dx] = col[dy];
         }
     }
 
